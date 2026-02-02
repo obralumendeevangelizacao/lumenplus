@@ -1,0 +1,210 @@
+name: Discord Audit Feed
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    types: [opened, reopened, closed, ready_for_review, converted_to_draft, synchronize, edited, labeled, unlabeled, assigned, unassigned]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  issues:
+    types: [opened, reopened, closed, edited, labeled, unlabeled, assigned, unassigned]
+  issue_comment:
+    types: [created, edited, deleted]
+  release:
+    types: [published, prereleased, released, edited, deleted]
+  create:
+  delete:
+  workflow_run:
+    workflows: ["*"]
+    types: [completed]
+  deployment:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build message + send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EVENT_JSON: ${{ toJson(github.event) }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          esc() { echo "$1" | tr -d '\r' ; }
+
+          # Helper to safely fetch from json
+          j() { jq -r "$1 // empty" <<< "$EVENT_JSON"; }
+
+          title=""
+          body=""
+          url=""
+
+          case "$EVENT_NAME" in
+            push)
+              ref=$(j '.ref')
+              branch="${ref#refs/heads/}"
+              compare=$(j '.compare')
+              head=$(j '.head_commit.id')
+              pusher=$(j '.pusher.name')
+
+              commits=$(jq -r '.commits[]? | "- [`\(.id[0:7])`](\(.url)) \(.message | split("\n")[0]) — \(.author.name)"' <<< "$EVENT_JSON" | head -n 20)
+              [ -z "${commits:-}" ] && commits="- (sem commits listados)"
+
+              title="🧾 PUSH"
+              url="$compare"
+              body="**Repo:** $REPO\n**Branch:** $branch\n**Por:** $pusher\n**Head:** `${head:0:7}`\n\n**Commits:**\n$commits"
+              ;;
+
+            pull_request)
+              action=$(j '.action')
+              number=$(j '.pull_request.number')
+              pr_title=$(j '.pull_request.title')
+              pr_user=$(j '.pull_request.user.login')
+              pr_url=$(j '.pull_request.html_url')
+              base=$(j '.pull_request.base.ref')
+              head=$(j '.pull_request.head.ref')
+              merged=$(j '.pull_request.merged')
+
+              title="🔀 PR $action"
+              url="$pr_url"
+
+              extra=""
+              if [ "$action" = "closed" ]; then
+                if [ "$merged" = "true" ]; then
+                  extra="✅ **Mergeado**"
+                else
+                  extra="⛔ **Fechado sem merge**"
+                fi
+              fi
+
+              body="**Repo:** $REPO\n**PR:** #$number — $pr_title\n**Autor:** $pr_user\n**De:** $head → **Para:** $base\n$extra"
+              ;;
+
+            pull_request_review)
+              action=$(j '.action')
+              state=$(j '.review.state')
+              reviewer=$(j '.review.user.login')
+              pr_number=$(j '.pull_request.number')
+              pr_title=$(j '.pull_request.title')
+              pr_url=$(j '.pull_request.html_url')
+
+              title="📝 REVIEW $state"
+              url="$pr_url"
+              body="**Repo:** $REPO\n**PR:** #$pr_number — $pr_title\n**Reviewer:** $reviewer\n**Ação:** $action"
+              ;;
+
+            issues)
+              action=$(j '.action')
+              number=$(j '.issue.number')
+              ititle=$(j '.issue.title')
+              iuser=$(j '.issue.user.login')
+              iurl=$(j '.issue.html_url')
+              is_pr=$(j '.issue.pull_request.url')
+
+              kind="ISSUE"
+              [ -n "$is_pr" ] && kind="PR (via Issue API)"
+
+              title="📌 $kind $action"
+              url="$iurl"
+              body="**Repo:** $REPO\n**$kind:** #$number — $ititle\n**Autor:** $iuser"
+              ;;
+
+            issue_comment)
+              action=$(j '.action')
+              number=$(j '.issue.number')
+              ititle=$(j '.issue.title')
+              cuser=$(j '.comment.user.login')
+              curl=$(j '.comment.html_url')
+              snippet=$(j '.comment.body' | head -c 300)
+
+              is_pr=$(j '.issue.pull_request.url')
+              kind="ISSUE"
+              [ -n "$is_pr" ] && kind="PR"
+
+              title="💬 COMMENT $action"
+              url="$curl"
+              body="**Repo:** $REPO\n**Em:** $kind #$number — $ititle\n**Por:** $cuser\n\n> $(esc "$snippet")"
+              ;;
+
+            release)
+              action=$(j '.action')
+              tag=$(j '.release.tag_name')
+              name=$(j '.release.name')
+              rurl=$(j '.release.html_url')
+              prerelease=$(j '.release.prerelease')
+              draft=$(j '.release.draft')
+
+              title="🏷️ RELEASE $action"
+              url="$rurl"
+              body="**Repo:** $REPO\n**Tag:** $tag\n**Nome:** $name\n**Draft:** $draft | **Pre-release:** $prerelease"
+              ;;
+
+            create)
+              ref_type=$(j '.ref_type')
+              ref=$(j '.ref')
+              title="➕ CREATE $ref_type"
+              url="$SERVER_URL/$REPO"
+              body="**Repo:** $REPO\n**Criou:** $ref_type `$ref`\n**Por:** $ACTOR"
+              ;;
+
+            delete)
+              ref_type=$(j '.ref_type')
+              ref=$(j '.ref')
+              title="➖ DELETE $ref_type"
+              url="$SERVER_URL/$REPO"
+              body="**Repo:** $REPO\n**Removeu:** $ref_type `$ref`\n**Por:** $ACTOR"
+              ;;
+
+            workflow_run)
+              wname=$(j '.workflow_run.name')
+              concl=$(j '.workflow_run.conclusion')
+              status=$(j '.workflow_run.status')
+              wrurl=$(j '.workflow_run.html_url')
+              branch=$(j '.workflow_run.head_branch')
+              sha=$(j '.workflow_run.head_sha')
+
+              title="🤖 WORKFLOW $status/$concl"
+              url="$wrurl"
+              body="**Repo:** $REPO\n**Workflow:** $wname\n**Branch:** $branch\n**SHA:** `${sha:0:7}`\n**Conclusão:** $concl"
+              ;;
+
+            deployment)
+              envname=$(j '.deployment.environment')
+              dsha=$(j '.deployment.sha')
+              title="🚀 DEPLOYMENT criado"
+              url="$SERVER_URL/$REPO"
+              body="**Repo:** $REPO\n**Ambiente:** $envname\n**SHA:** `${dsha:0:7}`\n**Por:** $ACTOR"
+              ;;
+
+            deployment_status)
+              state=$(j '.deployment_status.state')
+              envname=$(j '.deployment.environment')
+              logurl=$(j '.deployment_status.log_url')
+              desc=$(j '.deployment_status.description')
+              title="📡 DEPLOYMENT status: $state"
+              url="${logurl:-$SERVER_URL/$REPO}"
+              body="**Repo:** $REPO\n**Ambiente:** $envname\n**Estado:** $state\n**Detalhes:** $desc"
+              ;;
+
+            *)
+              title="📣 EVENT $EVENT_NAME"
+              url="$SERVER_URL/$REPO/actions/runs/$RUN_ID"
+              body="**Repo:** $REPO\n**Evento:** $EVENT_NAME\n**Por:** $ACTOR\n(sem parser específico)"
+              ;;
+          esac
+
+          content="**$title**\n$body\n\n🔗 $url"
+          payload=$(jq -n --arg content "$content" '{content: $content}')
+
+          curl -sS -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL" >/dev/null
+          echo "Sent: $title"
