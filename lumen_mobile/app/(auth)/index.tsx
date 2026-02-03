@@ -24,7 +24,7 @@ export default function WelcomeScreen() {
           <Text style={styles.logoText}>✝</Text>
         </View>
         <Text style={styles.title}>Lumen+</Text>
-        <Text style={styles.subtitle}>Comunidade Católica</Text>
+        <Text style={styles.subtitle}>Obra Lumen de Evangelização</Text>
       </View>
 
       {/* Texto de boas-vindas */}
@@ -55,9 +55,7 @@ export default function WelcomeScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>
-          Ao continuar, você concorda com nossos{' '}
-          <Text style={styles.link}>Termos de Uso</Text> e{' '}
-          <Text style={styles.link}>Política de Privacidade</Text>
+          Ao continuar, você concorda com nossos <Text style={styles.link}>Termos de Uso</Text> e <Text style={styles.link}>Política de Privacidade</Text>
         </Text>
       </View>
     </View>

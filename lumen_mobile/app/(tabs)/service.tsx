@@ -1,7 +1,7 @@
 /**
- * Community Screen (Grupo)
- * ========================
- * Tela de grupos - Em construção.
+ * Service Screen
+ * ==============
+ * Tela de serviços - Em construção.
  */
 
 import { View, Text, StyleSheet } from 'react-native';
@@ -14,7 +14,7 @@ const colors = {
   lightGray: '#E8E8E8',
 };
 
-export default function CommunityScreen() {
+export default function ServiceScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -26,7 +26,7 @@ export default function CommunityScreen() {
           Esta funcionalidade será adicionada em breve.
         </Text>
         <Text style={styles.hint}>
-          Aqui você poderá acompanhar as novidades do seu grupo da sua realidade vocacional. Contamos com sua oração.
+          Aqui você poderá acompanhar seus serviços e ministérios. Contamos com sua oração.
         </Text>
       </View>
     </View>

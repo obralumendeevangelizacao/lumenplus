@@ -178,9 +178,9 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Não tem uma conta? </Text>
+          <Text style={styles.footerText}>Não tem uma conta?</Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-            <Text style={styles.footerLink}>Criar conta</Text>
+            <Text style={styles.footerLink}> Criar conta</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
