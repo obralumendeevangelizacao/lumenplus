@@ -1,59 +1,69 @@
-# =========================
-# Python
-# =========================
-__pycache__/
-*.py[cod]
-*.pyo
+#################################
+# GLOBAL
+#################################
 .env
 .env.*
+*.log
+.DS_Store
+Thumbs.db
+
+#################################
+# IDE
+#################################
+.idea/
+.vscode/
+*.iml
+
+#################################
+# PYTHON (BACKEND)
+#################################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtualenv
 .venv/
 venv/
+
+# Local databases
 *.sqlite3
+*.db
 
-# =========================
-# Logs
-# =========================
-*.log
+#################################
+# DOCKER
+#################################
+docker-data/
+*.tar
 
-# =========================
-# Node / Frontend
-# =========================
+#################################
+# NODE / FRONTEND / MOBILE
+#################################
 node_modules/
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 .next/
 dist/
 build/
 
-# =========================
-# Flutter
-# =========================
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-build/
+#################################
+# EXPO / REACT NATIVE
+#################################
+.expo/
+web-build/
 
-# =========================
-# Cache
-# =========================
+#################################
+# STRAPI
+#################################
+strapi/.cache/
+strapi/build/
+strapi/node_modules/
+
+#################################
+# MISC
+#################################
 .cache/
-
-# =========================
-# IDE / OS
-# =========================
-.DS_Store
-.idea/
-.vscode/
-*.iml
-Thumbs.db
-
-# =========================
-# Test / Coverage
-# =========================
-.pytest_cache/
-.coverage
-htmlcov/
