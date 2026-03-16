@@ -20,7 +20,6 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native';
-import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orgService, orgAdminService } from '@/services';
 import api from '@/services/api';
@@ -286,8 +285,6 @@ export default function EntitiesScreen() {
   // ──────────────────────────────────────────────────────────────────────────
   return (
     <>
-      <Stack.Screen options={{ title: 'Entidades' }} />
-
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
