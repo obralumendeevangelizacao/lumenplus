@@ -24,20 +24,54 @@ interface AdminOption {
   route: string;
 }
 
-const adminOptions: AdminOption[] = [
+interface AdminSection {
+  title: string;
+  options: AdminOption[];
+}
+
+const adminSections: AdminSection[] = [
   {
-    id: 'create-aviso',
-    title: 'Criar Aviso',
-    description: 'Envie comunicados para membros',
-    icon: 'megaphone-outline',
-    route: '/admin/create-aviso',
+    title: 'Comunicações',
+    options: [
+      {
+        id: 'create-aviso',
+        title: 'Criar Aviso',
+        description: 'Envie comunicados para membros',
+        icon: 'megaphone-outline',
+        route: '/admin/create-aviso',
+      },
+      {
+        id: 'sent-avisos',
+        title: 'Avisos Enviados',
+        description: 'Veja o histórico de avisos enviados',
+        icon: 'paper-plane-outline',
+        route: '/admin/sent-avisos',
+      },
+    ],
   },
   {
-    id: 'sent-avisos',
-    title: 'Avisos Enviados',
-    description: 'Veja o histórico de avisos enviados',
-    icon: 'paper-plane-outline',
-    route: '/admin/sent-avisos',
+    title: 'Estrutura',
+    options: [
+      {
+        id: 'entities',
+        title: 'Entidades',
+        description: 'Gerencie setores, ministérios e grupos',
+        icon: 'git-network-outline',
+        route: '/admin/entities',
+      },
+    ],
+  },
+  {
+    title: 'Pessoas',
+    options: [
+      {
+        id: 'users',
+        title: 'Gestão de Usuários',
+        description: 'Veja e gerencie os membros cadastrados',
+        icon: 'people-outline',
+        route: '/admin/users',
+      },
+    ],
   },
 ];
 
@@ -59,28 +93,31 @@ export default function AdminMenuScreen() {
           </View>
           <Text style={styles.headerTitle}>Área Administrativa</Text>
           <Text style={styles.headerSubtitle}>
-            Gerencie comunicações e avisos da comunidade
+            Gerencie entidades, membros e comunicações
           </Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Opções</Text>
-
-        {adminOptions.map((option) => (
-          <TouchableOpacity
-            key={option.id}
-            style={styles.optionCard}
-            onPress={() => router.push(option.route as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.optionIconContainer}>
-              <Ionicons name={option.icon as any} size={24} color={colors.admin} />
-            </View>
-            <View style={styles.optionContent}>
-              <Text style={styles.optionTitle}>{option.title}</Text>
-              <Text style={styles.optionDescription}>{option.description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.gray} />
-          </TouchableOpacity>
+        {adminSections.map((section) => (
+          <View key={section.title}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            {section.options.map((option) => (
+              <TouchableOpacity
+                key={option.id}
+                style={styles.optionCard}
+                onPress={() => router.push(option.route as any)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name={option.icon as any} size={24} color={colors.admin} />
+                </View>
+                <View style={styles.optionContent}>
+                  <Text style={styles.optionTitle}>{option.title}</Text>
+                  <Text style={styles.optionDescription}>{option.description}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.gray} />
+              </TouchableOpacity>
+            ))}
+          </View>
         ))}
 
         <TouchableOpacity 
