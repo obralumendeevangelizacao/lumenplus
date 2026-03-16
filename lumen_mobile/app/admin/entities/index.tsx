@@ -105,6 +105,21 @@ interface EditModalState {
   unit: OrgUnitNode | null;
 }
 
+interface ProfileModalState {
+  visible: boolean;
+  unit: OrgUnitNode | null;
+  canEdit: boolean;
+}
+
+interface MemberItem {
+  user_id: string;
+  user_name: string;
+  user_email: string | null;
+  role: string; // 'COORDINATOR' | 'MEMBER'
+  status: string;
+  joined_at: string;
+}
+
 // =============================================================================
 // Helpers de permissão client-side
 // =============================================================================
@@ -160,6 +175,12 @@ export default function EntitiesScreen() {
   const [editModal, setEditModal] = useState<EditModalState>({
     visible: false,
     unit: null,
+  });
+
+  const [profileModal, setProfileModal] = useState<ProfileModalState>({
+    visible: false,
+    unit: null,
+    canEdit: false,
   });
 
   const loadTree = useCallback(async () => {
@@ -240,6 +261,15 @@ export default function EntitiesScreen() {
         </View>
 
         <View style={styles.unitActions}>
+          {/* Ver membros */}
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => setProfileModal({ visible: true, unit, canEdit: canEditUnit(unit) })}
+          >
+            <Ionicons name="people-outline" size={14} color={colors.primary} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Membros</Text>
+          </TouchableOpacity>
+
           {/* Convidar membro */}
           <TouchableOpacity
             style={styles.actionBtn}
@@ -368,6 +398,13 @@ export default function EntitiesScreen() {
           setEditModal({ visible: false, unit: null });
           loadTree();
         }}
+      />
+
+      {/* Modal de perfil / membros */}
+      <EntityProfileModal
+        state={profileModal}
+        onClose={() => setProfileModal({ visible: false, unit: null, canEdit: false })}
+        onMembersChanged={() => loadTree()}
       />
     </>
   );
@@ -819,6 +856,340 @@ function EditEntityModal({
     </Modal>
   );
 }
+
+// =============================================================================
+// Modal de Perfil da Entidade (lista de membros)
+// =============================================================================
+function EntityProfileModal({
+  state,
+  onClose,
+  onMembersChanged,
+}: {
+  state: ProfileModalState;
+  onClose: () => void;
+  onMembersChanged: () => void;
+}) {
+  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.visible && state.unit) {
+      loadMembers();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.visible, state.unit?.id]);
+
+  const loadMembers = async () => {
+    if (!state.unit) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await orgAdminService.getMembers(state.unit.id) as any;
+      setMembers(res.members ?? []);
+    } catch {
+      setError('Erro ao carregar membros');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangeRole = async (member: MemberItem, newRole: 'COORDINATOR' | 'MEMBER') => {
+    if (!state.unit) return;
+    setActionLoading(member.user_id);
+    try {
+      await orgAdminService.updateMemberRole(state.unit.id, member.user_id, newRole);
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === member.user_id ? { ...m, role: newRole } : m))
+      );
+      onMembersChanged();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail?.message ?? 'Erro ao alterar cargo';
+      Alert.alert('Erro', msg);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRemove = (member: MemberItem) => {
+    if (!state.unit) return;
+    Alert.alert(
+      'Remover membro',
+      `Remover ${member.user_name} de "${state.unit.name}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Remover',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading(member.user_id);
+            try {
+              await orgAdminService.removeMember(state.unit!.id, member.user_id);
+              setMembers((prev) => prev.filter((m) => m.user_id !== member.user_id));
+              onMembersChanged();
+            } catch (e: any) {
+              const msg = e?.response?.data?.detail?.message ?? 'Erro ao remover membro';
+              Alert.alert('Erro', msg);
+            } finally {
+              setActionLoading(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const coordinators = members.filter((m) => m.role === 'COORDINATOR');
+  const regularMembers = members.filter((m) => m.role === 'MEMBER');
+  const unit = state.unit;
+
+  return (
+    <Modal visible={state.visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
+        {/* Header */}
+        <View style={styles.modalHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.modalTitle}>{unit?.name}</Text>
+            {unit && (
+              <Text style={{ fontSize: 12, color: colors.gray, marginTop: 2 }}>
+                {TYPE_LABELS[unit.type] ?? unit.type}
+                {' · '}
+                {members.length} membro{members.length !== 1 ? 's' : ''}
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Conteúdo */}
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.admin} />
+          </View>
+        ) : error ? (
+          <View style={[styles.center, { padding: 24 }]}>
+            <Ionicons name="alert-circle-outline" size={32} color={colors.danger} />
+            <Text style={[styles.errorText, { marginTop: 8 }]}>{error}</Text>
+            <TouchableOpacity style={[styles.retryBtn, { marginTop: 12 }]} onPress={loadMembers}>
+              <Text style={styles.retryBtnText}>Tentar novamente</Text>
+            </TouchableOpacity>
+          </View>
+        ) : members.length === 0 ? (
+          <View style={[styles.center, { padding: 32 }]}>
+            <Ionicons name="people-outline" size={44} color={colors.gray} />
+            <Text style={{ color: colors.gray, marginTop: 12, textAlign: 'center', fontSize: 14 }}>
+              Nenhum membro nesta entidade ainda.
+            </Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.modalBody}>
+            {/* Coordenação */}
+            {coordinators.length > 0 && (
+              <>
+                <View style={memberStyles.sectionHeader}>
+                  <Ionicons name="star" size={13} color={colors.admin} />
+                  <Text style={memberStyles.sectionTitle}>
+                    Coordenação ({coordinators.length})
+                  </Text>
+                </View>
+                {coordinators.map((m) => (
+                  <MemberCard
+                    key={m.user_id}
+                    member={m}
+                    canEdit={state.canEdit}
+                    loading={actionLoading === m.user_id}
+                    onChangeRole={(role) => handleChangeRole(m, role)}
+                    onRemove={() => handleRemove(m)}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* Membros */}
+            {regularMembers.length > 0 && (
+              <>
+                <View style={memberStyles.sectionHeader}>
+                  <Ionicons name="people-outline" size={13} color={colors.primary} />
+                  <Text style={[memberStyles.sectionTitle, { color: colors.primary }]}>
+                    Membros ({regularMembers.length})
+                  </Text>
+                </View>
+                {regularMembers.map((m) => (
+                  <MemberCard
+                    key={m.user_id}
+                    member={m}
+                    canEdit={state.canEdit}
+                    loading={actionLoading === m.user_id}
+                    onChangeRole={(role) => handleChangeRole(m, role)}
+                    onRemove={() => handleRemove(m)}
+                  />
+                ))}
+              </>
+            )}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+// =============================================================================
+// Card de membro individual
+// =============================================================================
+function MemberCard({
+  member,
+  canEdit,
+  loading,
+  onChangeRole,
+  onRemove,
+}: {
+  member: MemberItem;
+  canEdit: boolean;
+  loading: boolean;
+  onChangeRole: (role: 'COORDINATOR' | 'MEMBER') => void;
+  onRemove: () => void;
+}) {
+  const isCoord = member.role === 'COORDINATOR';
+  const initial = (member.user_name || member.user_email || '?')[0].toUpperCase();
+
+  return (
+    <View style={memberStyles.memberCard}>
+      {/* Avatar */}
+      <View style={[memberStyles.avatar, isCoord && memberStyles.avatarCoord]}>
+        <Text style={memberStyles.avatarText}>{initial}</Text>
+      </View>
+
+      {/* Info */}
+      <View style={{ flex: 1 }}>
+        <Text style={memberStyles.memberName} numberOfLines={1}>{member.user_name}</Text>
+        {member.user_email ? (
+          <Text style={memberStyles.memberEmail} numberOfLines={1}>{member.user_email}</Text>
+        ) : null}
+        <View style={memberStyles.roleRow}>
+          <View style={[memberStyles.roleBadge, isCoord ? memberStyles.roleBadgeCoord : memberStyles.roleBadgeMember]}>
+            <Text style={[memberStyles.roleText, { color: isCoord ? colors.admin : colors.primary }]}>
+              {isCoord ? 'Coordenador' : 'Membro'}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Ações (só para admin) */}
+      {canEdit && (
+        <View style={memberStyles.actions}>
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.admin} style={{ marginHorizontal: 8 }} />
+          ) : (
+            <>
+              {/* Promover/rebaixar */}
+              <TouchableOpacity
+                style={memberStyles.actionIconBtn}
+                onPress={() => onChangeRole(isCoord ? 'MEMBER' : 'COORDINATOR')}
+              >
+                <Ionicons
+                  name={isCoord ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'}
+                  size={24}
+                  color={isCoord ? colors.gray : colors.admin}
+                />
+              </TouchableOpacity>
+              {/* Remover */}
+              <TouchableOpacity style={memberStyles.actionIconBtn} onPress={onRemove}>
+                <Ionicons name="person-remove-outline" size={24} color={colors.danger} />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const memberStyles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.admin,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  memberCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fafafa',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.lightGray,
+  },
+  avatar: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  avatarCoord: {
+    backgroundColor: colors.admin,
+  },
+  avatarText: {
+    color: colors.white,
+    fontWeight: '700',
+    fontSize: 17,
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  memberEmail: {
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: 1,
+  },
+  roleRow: {
+    flexDirection: 'row',
+    marginTop: 5,
+  },
+  roleBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  roleBadgeCoord: {
+    backgroundColor: colors.adminLight,
+    borderColor: colors.admin,
+  },
+  roleBadgeMember: {
+    backgroundColor: '#e0f2fe',
+    borderColor: colors.primary,
+  },
+  roleText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  actionIconBtn: {
+    padding: 6,
+  },
+});
 
 // =============================================================================
 // Estilos

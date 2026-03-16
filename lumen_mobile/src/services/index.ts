@@ -100,6 +100,9 @@ export const orgService = {
    * Endpoint correto: GET /org/tree (não /org-units/tree)
    */
   getTree: () => api.get<OrgTree>('/org/tree'),
+
+  /** Lista memberships ativos do usuário autenticado. */
+  getMyMemberships: () => api.get<Membership[]>('/org/my/memberships'),
 };
 
 // =============================================================================
@@ -240,6 +243,12 @@ export const orgAdminService = {
   /** Edita nome e/ou descrição de uma unidade. */
   updateUnit: (unitId: string, data: { name?: string; description?: string }) =>
     api.patch(`/org/units/${unitId}`, data as Record<string, unknown>),
+
+  /** Atualiza o cargo (role) de um membro: COORDINATOR ou MEMBER. */
+  updateMemberRole: (orgUnitId: string, memberUserId: string, role: 'COORDINATOR' | 'MEMBER') =>
+    api.put<{ message: string; user_id: string; new_role: string }>(
+      `/org/units/${orgUnitId}/members/${memberUserId}/role?role=${encodeURIComponent(role)}`
+    ),
 };
 
 // =============================================================================
