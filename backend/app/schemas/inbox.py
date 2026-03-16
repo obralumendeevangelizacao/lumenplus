@@ -43,11 +43,14 @@ class InboxSendRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=200, description="Título do aviso")
     message: str = Field(..., min_length=10, max_length=5000, description="Conteúdo do aviso")
     type: str = Field(default="info", description="Tipo: info, warning, success, urgent")
-    
-    # Destinatários
-    send_to_all: bool = Field(default=False, description="Enviar para todos os usuários")
-    filters: InboxFilters | None = Field(None, description="Filtros de segmentação (se não for para todos)")
-    
+
+    # Escopo: unidade organizacional alvo (coordenadores usam este campo)
+    scope_org_unit_id: UUID | None = Field(None, description="UUID da OrgUnit alvo (nil = sem escopo de org)")
+
+    # Destinatários globais (requer CAN_SEND_INBOX)
+    send_to_all: bool = Field(default=False, description="Enviar para todos os usuários ativos")
+    filters: InboxFilters | None = Field(None, description="Filtros de perfil adicionais")
+
     # Anexos
     attachments: list[InboxAttachment] | None = Field(None, description="Anexos (imagens ou links)")
 
@@ -55,14 +58,20 @@ class InboxSendRequest(BaseModel):
 class InboxPreviewRequest(BaseModel):
     """Request para preview de quantos receberão."""
     send_to_all: bool = Field(default=False)
+    scope_org_unit_id: UUID | None = None
     filters: InboxFilters | None = None
 
 
 # === RESPONSE SCHEMAS ===
 
 class InboxMessageResponse(BaseModel):
-    """Resposta com dados de uma mensagem do inbox."""
-    id: UUID
+    """Resposta com dados de uma mensagem do inbox.
+
+    - id: UUID do registro InboxRecipient (controla leitura por usuário)
+    - message_id: UUID da InboxMessage (a mensagem em si, compartilhada entre destinatários)
+    """
+    id: UUID          # InboxRecipient.id — usar para PATCH /{id}/read
+    message_id: UUID  # InboxMessage.id — usar para identificar a mensagem
     title: str
     message: str
     type: str
@@ -71,12 +80,31 @@ class InboxMessageResponse(BaseModel):
     created_at: datetime
     expires_at: datetime
     attachments: list[dict[str, Any]] | None = None
-    
-    # Dados do remetente (opcional)
     sender_name: str | None = None
 
     class Config:
         from_attributes = True
+
+
+class InboxSentMessageResponse(BaseModel):
+    """Mensagem enviada (visão do remetente)."""
+    id: UUID
+    title: str
+    message: str
+    type: str
+    created_at: datetime
+    expires_at: datetime
+    recipient_count: int
+    read_count: int
+    filters: dict[str, Any] | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class InboxSentResponse(BaseModel):
+    """Lista de mensagens enviadas."""
+    messages: list[InboxSentMessageResponse]
 
 
 class InboxListResponse(BaseModel):
@@ -100,12 +128,29 @@ class InboxSendResponse(BaseModel):
 
 
 class InboxFiltersOptionsResponse(BaseModel):
-    """Opções disponíveis para filtros."""
+    """Opções disponíveis para filtros de perfil."""
     vocational_realities: list[dict[str, str]]
     life_states: list[dict[str, str]]
     marital_statuses: list[dict[str, str]]
     states: list[str]
     cities: list[str]
+
+
+class OrgScopeResponse(BaseModel):
+    """Unidade organizacional para a qual o usuário pode enviar avisos."""
+    id: UUID
+    name: str
+    type: str          # ex: SETOR, MINISTERIO, GRUPO
+    member_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class SendScopesResponse(BaseModel):
+    """Escopos disponíveis para envio de aviso."""
+    can_send_to_all: bool          # True se tem CAN_SEND_INBOX
+    scopes: list[OrgScopeResponse]  # OrgUnits onde é coordenador (ou todas, se admin)
 
 
 # === PERMISSION SCHEMAS ===

@@ -299,19 +299,36 @@ def respond_to_invite(
     
     now = datetime.now(timezone.utc)
     invite.responded_at = now
-    
+
     if accept:
         invite.status = InviteStatus.ACCEPTED
-        
-        # Cria membership
-        membership = OrgMembership(
-            user_id=user_id,
-            org_unit_id=invite.org_unit_id,
-            role=invite.role,
-            status=MembershipStatus.ACTIVE,
-            invite_id=invite.id,
-        )
-        db.add(membership)
+
+        # Verifica se existe membership anterior (ex: usuário removido e re-convidado).
+        # A unique constraint em (user_id, org_unit_id) impede INSERT duplicado —
+        # nesse caso reativamos o registro existente em vez de criar novo.
+        existing_membership = db.execute(
+            select(OrgMembership)
+            .where(
+                OrgMembership.user_id == user_id,
+                OrgMembership.org_unit_id == invite.org_unit_id,
+            )
+        ).scalar_one_or_none()
+
+        if existing_membership:
+            # Reativa membership (soft-delete anterior) sem violar unique constraint
+            existing_membership.role = invite.role
+            existing_membership.status = MembershipStatus.ACTIVE
+            existing_membership.invite_id = invite.id
+            existing_membership.joined_at = now
+        else:
+            membership = OrgMembership(
+                user_id=user_id,
+                org_unit_id=invite.org_unit_id,
+                role=invite.role,
+                status=MembershipStatus.ACTIVE,
+                invite_id=invite.id,
+            )
+            db.add(membership)
     else:
         invite.status = InviteStatus.REJECTED
     
@@ -565,8 +582,8 @@ def remove_member(
             )
     
     # Marca como removido (soft delete)
+    # Nota: OrgMembership não tem coluna left_at — o status REMOVED é suficiente.
     membership.status = MembershipStatus.REMOVED
-    membership.left_at = datetime.now(timezone.utc)
     db.commit()
 
 

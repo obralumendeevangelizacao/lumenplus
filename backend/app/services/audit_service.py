@@ -89,16 +89,20 @@ def create_audit_log(
         return None
     
     # Sanitiza metadata para remover dados sensíveis
-    safe_metadata = sanitize_sensitive_data(metadata) if metadata else None
-    
+    safe_metadata: dict = sanitize_sensitive_data(metadata) if metadata else {}
+
+    # AuditLog não tem colunas ip/user_agent — mesclamos em extra_data (JSONB)
+    if ip:
+        safe_metadata["ip"] = ip
+    if user_agent:
+        safe_metadata["user_agent"] = user_agent
+
     audit_log = AuditLog(
         actor_user_id=actor_user_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
-        ip=ip,
-        user_agent=user_agent,
-        extra_data=safe_metadata,
+        extra_data=safe_metadata or None,
     )
     
     db.add(audit_log)

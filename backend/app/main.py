@@ -12,11 +12,14 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer
 
-from app.core.settings import settings
+# Fonte canônica de settings
+from app.settings import settings
 
 # Configura logging
 structlog.configure(
@@ -38,7 +41,7 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("application_startup", environment=settings.environment, version=settings.app_version)
-    
+
     # Valida configurações em produção
     errors = settings.validate_production_settings()
     if errors:
@@ -46,10 +49,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             logger.error("config_error", message=err)
         if settings.is_production:
             raise RuntimeError(f"Configuração inválida: {errors}")
-    
+
     yield
     logger.info("application_shutdown")
 
+
+# Dependência de segurança — só serve para o Swagger UI mostrar o cadeado 🔒
+# A validação real do token é feita em app/api/deps.py (CurrentUser)
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 app = FastAPI(
     title="Lumen+ API",
@@ -58,7 +65,35 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.is_dev else None,
     redoc_url="/redoc" if settings.is_dev else None,
+    dependencies=[Depends(_bearer_scheme)],
 )
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    # Adiciona Bearer token como scheme de segurança global
+    schema.setdefault("components", {})
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "dev:<user_id>:<email>  (DEV) | JWT (PROD)",
+        }
+    }
+    # Aplica a todos os endpoints
+    for path in schema.get("paths", {}).values():
+        for operation in path.values():
+            operation.setdefault("security", [{"BearerAuth": []}])
+    app.openapi_schema = schema
+    return schema
+
 
 # CORS
 app.add_middleware(
@@ -82,12 +117,19 @@ async def add_request_id(request: Request, call_next):
 
 
 # Exception handler
+# SEGURANÇA: loga apenas o tipo da exceção, NUNCA o conteúdo da mensagem,
+# pois ela pode conter CPF, RG, telefone ou outros dados sensíveis do request.
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("unhandled_exception", error=str(exc), path=request.url.path)
+    logger.error(
+        "unhandled_exception",
+        error_type=type(exc).__name__,   # apenas o tipo, nunca str(exc)
+        path=request.url.path,
+        method=request.method,
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": {"error": "internal_error", "message": "Erro interno do servidor"}}
+        content={"detail": {"error": "internal_error", "message": "Erro interno do servidor"}},
     )
 
 
@@ -104,17 +146,24 @@ async def health():
 
 # Rotas
 from app.api.routes.auth import router as auth_router
-from app.api.routes.profile import router as profile_router
+from app.api.profile_routes import router as profile_router   # routes/profile (quebrado) substituido por profile_routes
 from app.api.routes.organization import router as org_router
 from app.api.inbox_routes import router as inbox_router
+from app.api.verification_routes import router as verify_router  # verificacao de telefone via body
+from app.api.legal_routes import router as legal_router          # /legal/latest e /legal/accept (era orphan — não registrado)
 
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(org_router)
 app.include_router(inbox_router)
+app.include_router(verify_router)
+app.include_router(legal_router)
 
 # Dev endpoints
 if settings.enable_dev_endpoints:
     from app.api.routes.dev import router as dev_router
     app.include_router(dev_router)
     logger.warning("dev_endpoints_enabled", message="Endpoints /dev/* estão habilitados!")
+
+# Sobrescreve o schema OpenAPI após todos os routers estarem registrados
+app.openapi = custom_openapi  # type: ignore

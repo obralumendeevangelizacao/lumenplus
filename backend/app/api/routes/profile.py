@@ -96,7 +96,7 @@ class EmergencyContactOut(BaseModel):
 
 # === ROUTES ===
 
-@router.get("/profile", response_model=ProfileOut)
+@router.get("/profile")
 async def get_profile(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -105,6 +105,27 @@ async def get_profile(
     profile = user.profile
     if not profile:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Perfil não encontrado"})
+    
+    # Buscar labels dos catálogos
+    from app.db.models import ProfileCatalogItem
+    
+    life_state_label = None
+    if profile.life_state_item_id:
+        item = db.get(ProfileCatalogItem, profile.life_state_item_id)
+        if item:
+            life_state_label = item.label
+    
+    marital_status_label = None
+    if profile.marital_status_item_id:
+        item = db.get(ProfileCatalogItem, profile.marital_status_item_id)
+        if item:
+            marital_status_label = item.label
+    
+    vocational_reality_label = None
+    if profile.vocational_reality_item_id:
+        item = db.get(ProfileCatalogItem, profile.vocational_reality_item_id)
+        if item:
+            vocational_reality_label = item.label
     
     # Nome do acompanhador
     accompanist_name = profile.vocational_accompanist_name
@@ -120,27 +141,27 @@ async def get_profile(
         if ministry:
             ministry_name = ministry.name
     
-    return ProfileOut(
-        user_id=profile.user_id,
-        full_name=profile.full_name,
-        birth_date=profile.birth_date,
-        photo_url=profile.photo_url,
-        phone_e164=profile.phone_e164,
-        phone_verified=profile.phone_verified,
-        city=profile.city,
-        state=profile.state,
-        life_state=profile.life_state,
-        consecration_year=profile.consecration_year,
-        marital_status=profile.marital_status,
-        vocational_reality=profile.vocational_reality,
-        has_vocational_accompaniment=profile.has_vocational_accompaniment,
-        vocational_accompanist_name=accompanist_name,
-        interested_in_ministry=profile.interested_in_ministry,
-        interested_ministry_name=ministry_name,
-        ministry_interest_notes=profile.ministry_interest_notes,
-        status=profile.status,
-        has_documents=bool(profile.cpf_encrypted),
-    )
+    return {
+        "user_id": str(profile.user_id),
+        "full_name": profile.full_name,
+        "birth_date": profile.birth_date.isoformat() if profile.birth_date else None,
+        "photo_url": profile.photo_url,
+        "phone_e164": profile.phone_e164,
+        "phone_verified": profile.phone_verified,
+        "city": profile.city,
+        "state": profile.state,
+        "life_state": life_state_label,
+        "consecration_year": profile.consecration_year,
+        "marital_status": marital_status_label,
+        "vocational_reality": vocational_reality_label,
+        "has_vocational_accompaniment": profile.has_vocational_accompaniment,
+        "vocational_accompanist_name": accompanist_name,
+        "interested_in_ministry": profile.interested_in_ministry,
+        "interested_ministry_name": ministry_name,
+        "ministry_interest_notes": profile.ministry_interest_notes,
+        "status": profile.status,
+        "has_documents": bool(profile.cpf_encrypted),
+    }
 
 
 @router.put("/profile", response_model=ProfileOut)

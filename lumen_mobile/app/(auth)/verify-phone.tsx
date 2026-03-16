@@ -29,7 +29,7 @@ const colors = {
 };
 
 export default function VerifyPhoneScreen() {
-  const params = useLocalSearchParams<{ phone: string; method: string }>();
+  const params = useLocalSearchParams<{ phone: string; method: string; fullName: string }>();
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -140,7 +140,14 @@ export default function VerifyPhoneScreen() {
 
       // Sucesso! Navega para completar perfil
       Alert.alert('Sucesso!', 'Telefone verificado com sucesso!', [
-        { text: 'Continuar', onPress: () => router.replace('/(onboarding)/profile') },
+        {
+          text: 'Continuar',
+          onPress: () =>
+            router.replace({
+              pathname: '/(onboarding)/profile',
+              params: { fullName: params.fullName || '', phone: params.phone || '' },
+            }),
+        },
       ]);
     } catch (err: any) {
       const message = err.response?.data?.detail?.message || 'Código inválido';

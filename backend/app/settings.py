@@ -42,7 +42,15 @@ class Settings(BaseSettings):
     # =========================================================================
     # DATABASE
     # =========================================================================
-    database_url: str = Field(default="postgresql://lumen:lumen_secret@localhost:5432/lumen_db")
+    database_url: str = Field(default="postgresql+psycopg://lumen:lumen_secret@localhost:5432/lumen_db")
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        """Converte o formato padrão do Railway/Render (postgresql://) para psycopg3."""
+        if isinstance(v, str) and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+psycopg://", 1)
+        return v
     database_pool_size: int = Field(default=5)
     database_max_overflow: int = Field(default=10)
     redis_url: str = Field(default="redis://localhost:6379/0")

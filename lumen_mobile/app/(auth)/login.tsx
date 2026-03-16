@@ -1,7 +1,8 @@
 /**
  * Login Screen
  * ============
- * Tela de login com email e senha.
+ * Autenticação via Firebase (email + senha).
+ * Recuperação de senha via Firebase sendPasswordResetEmail.
  */
 
 import { useState } from 'react';
@@ -16,17 +17,22 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  StatusBar,
 } from 'react-native';
 import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import api from '@/services/api';
+import { Ionicons } from '@expo/vector-icons';
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
+import { auth } from '@/config/firebase';
 
 const colors = {
-  primary: '#1a365d',
+  primary: '#1A859B',
   white: '#ffffff',
+  orange: '#F5A623',
   gray: '#6b7280',
-  lightGray: '#f3f4f6',
-  error: '#ef4444',
+  inputBg: 'rgba(255, 255, 255, 0.9)',
 };
 
 export default function LoginScreen() {
@@ -37,249 +43,225 @@ export default function LoginScreen() {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-
-    if (!email.includes('@')) {
-      newErrors.email = 'Email inválido';
-    }
-
-    if (!password) {
-      newErrors.password = 'Digite sua senha';
-    }
-
+    if (!email.includes('@')) newErrors.email = 'Email inválido';
+    if (!password) newErrors.password = 'Digite sua senha';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-
     try {
       setIsLoading(true);
-
-      const response = await api.post<{ access_token: string; user_id: string }>('/auth/login', {
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      await SecureStore.setItemAsync('auth_token', response.access_token);
+      await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+      // Firebase gerencia o token — o backend provisiona o usuário
+      // na primeira requisição autenticada via deps.py
       router.replace('/(tabs)/home');
-    } catch (err: any) {
-      const message = err.response?.data?.detail?.message || 'Email ou senha inválidos';
-      Alert.alert('Erro', message);
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code ?? '';
+      let message = 'Email ou senha inválidos';
+      if (code === 'auth/user-not-found') message = 'Usuário não encontrado';
+      if (code === 'auth/wrong-password') message = 'Senha incorreta';
+      if (code === 'auth/too-many-requests') message = 'Muitas tentativas. Aguarde e tente novamente';
+      if (code === 'auth/invalid-credential') message = 'Email ou senha inválidos';
+      Alert.alert('Erro ao entrar', message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDevLogin = async () => {
+  const handleForgotPassword = async () => {
     if (!email.includes('@')) {
-      setErrors({ email: 'Email inválido' });
+      setErrors({ email: 'Digite seu email acima primeiro' });
       return;
     }
-
     try {
-      setIsLoading(true);
-      const devToken = `dev:${email.split('@')[0]}:${email.trim().toLowerCase()}`;
-      await SecureStore.setItemAsync('auth_token', devToken);
-      router.replace('/(tabs)/home');
-    } catch (err) {
-      Alert.alert('Erro', 'Erro ao fazer login');
-    } finally {
-      setIsLoading(false);
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      Alert.alert(
+        'Email enviado',
+        `Enviamos um link de redefinição de senha para ${email.trim().toLowerCase()}.`
+      );
+    } catch {
+      Alert.alert('Erro', 'Não foi possível enviar o email. Verifique o endereço e tente novamente.');
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backButton}>← Voltar</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Logo */}
-        <View style={styles.logoSection}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>✝</Text>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo Section */}
+          <View style={styles.logoSection}>
+            <View style={styles.compassContainer}>
+              <Ionicons name="compass-outline" size={80} color={colors.white} />
+            </View>
+            <Text style={styles.logoText}>
+              LUMEN<Text style={styles.logoPlus}>+</Text>
+            </Text>
+            <Text style={styles.slogan}>
+              Mais <Text style={styles.sloganBold}>Luz</Text> | Mais{' '}
+              <Text style={styles.sloganBold}>Encontro</Text>
+            </Text>
           </View>
-          <Text style={styles.title}>Lumen+</Text>
-        </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <Text style={styles.welcomeText}>Bem-vindo de volta!</Text>
-          <Text style={styles.instructionText}>
-            Entre com suas credenciais
-          </Text>
+          {/* Form */}
+          <View style={styles.form}>
+            <TextInput
+              style={[styles.input, errors.email && styles.inputError]}
+              placeholder="E-mail"
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setErrors({ ...errors, email: '' });
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholderTextColor={colors.gray}
+            />
+            {errors.email ? (
+              <Text style={styles.errorText}>{errors.email}</Text>
+            ) : null}
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={[styles.input, errors.email && styles.inputError]}
-            placeholder="seu@email.com"
-            value={email}
-            onChangeText={(text) => {
-              setEmail(text);
-              setErrors({ ...errors, email: '' });
-            }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            placeholderTextColor={colors.gray}
-          />
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            <TextInput
+              style={[styles.input, errors.password && styles.inputError]}
+              placeholder="Senha"
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                setErrors({ ...errors, password: '' });
+              }}
+              secureTextEntry
+              placeholderTextColor={colors.gray}
+            />
+            {errors.password ? (
+              <Text style={styles.errorText}>{errors.password}</Text>
+            ) : null}
 
-          <Text style={styles.label}>Senha</Text>
-          <TextInput
-            style={[styles.input, errors.password && styles.inputError]}
-            placeholder="Sua senha"
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              setErrors({ ...errors, password: '' });
-            }}
-            secureTextEntry
-            placeholderTextColor={colors.gray}
-          />
-          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+            >
+              <Text style={styles.forgotPasswordText}>Esqueci a senha</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>Esqueci minha senha</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color={colors.white} />
+              ) : (
+                <Text style={styles.primaryButtonText}>Entrar</Text>
+              )}
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={colors.white} />
-            ) : (
-              <Text style={styles.primaryButtonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* DEV mode shortcut */}
-          <TouchableOpacity
-            style={styles.devButton}
-            onPress={handleDevLogin}
-            disabled={isLoading}
-          >
-            <Text style={styles.devButtonText}>🛠️ DEV: Login sem senha</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Não tem uma conta?</Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-            <Text style={styles.footerLink}> Criar conta</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Não tem uma conta? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+              <Text style={styles.footerLink}>Crie agora.</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.primary,
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
-  },
-  header: {
-    paddingTop: 20,
-    marginBottom: 20,
-  },
-  backButton: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: '500',
+    paddingHorizontal: 32,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
   logoSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 48,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+  compassContainer: {
+    marginBottom: 16,
   },
   logoText: {
-    fontSize: 40,
-    color: colors.white,
-  },
-  title: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: 'bold',
-    color: colors.primary,
+    color: colors.white,
+    letterSpacing: 2,
+  },
+  logoPlus: {
+    fontSize: 36,
+    fontWeight: 'normal',
+  },
+  slogan: {
+    fontSize: 16,
+    color: colors.white,
+    opacity: 0.9,
+    marginTop: 8,
+  },
+  sloganBold: {
+    fontWeight: 'bold',
   },
   form: {
     flex: 1,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#171717',
-    marginBottom: 4,
-  },
-  instructionText: {
-    fontSize: 16,
-    color: colors.gray,
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#171717',
-    marginBottom: 8,
-    marginTop: 16,
-  },
   input: {
-    backgroundColor: colors.lightGray,
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.inputBg,
+    borderRadius: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
+    marginBottom: 12,
+    color: '#333',
   },
   inputError: {
-    borderColor: colors.error,
+    borderWidth: 2,
+    borderColor: '#ef4444',
+    marginBottom: 4,
   },
   errorText: {
-    color: colors.error,
+    color: '#fecaca',
     fontSize: 13,
-    marginTop: 4,
+    marginBottom: 10,
+    marginLeft: 16,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
-    marginTop: 12,
+    marginBottom: 20,
   },
   forgotPasswordText: {
     fontSize: 14,
-    color: colors.primary,
-    fontWeight: '500',
+    color: colors.white,
+    textDecorationLine: 'underline',
   },
   primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 18,
+    backgroundColor: colors.orange,
+    borderRadius: 25,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -289,29 +271,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  devButton: {
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-  },
-  devButtonText: {
-    color: colors.gray,
-    fontSize: 14,
-  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingVertical: 24,
+    paddingTop: 32,
   },
   footerText: {
     fontSize: 14,
-    color: colors.gray,
+    color: colors.white,
   },
   footerLink: {
     fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
+    color: colors.white,
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
   },
 });

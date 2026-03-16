@@ -11,10 +11,16 @@ alembic==1.13.1
 
 # Settings
 pydantic==2.5.3
+pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 
 # Auth (quando implementar Firebase)
 # firebase-admin==6.3.0
+
+# Auth / Crypto
+cachetools==5.3.2
+python-jose[cryptography]==3.3.0
+cryptography==42.0.2
 
 # Utils
 python-multipart==0.0.6

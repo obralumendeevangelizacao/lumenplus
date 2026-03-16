@@ -6,12 +6,10 @@ Unidades organizacionais, convites, membros.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.db.session import get_db
+from app.api.deps import CurrentUser, DBSession
 from app.db.models import User, OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
-from app.api.routes.auth import get_current_user
 from app.schemas.organization import (
     CreateOrgUnitRequest, OrgUnitOut, OrgUnitWithChildren, OrgTreeResponse,
     SendInviteRequest, InviteDetailOut, InviteResponse, PendingInvitesResponse,
@@ -50,8 +48,8 @@ def handle_org_error(e: OrgServiceError):
 
 @router.get("/tree", response_model=OrgTreeResponse)
 async def get_organization_tree(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Retorna árvore organizacional."""
     root = get_org_tree(db, user.id)
@@ -89,8 +87,8 @@ async def get_organization_tree(
 async def create_child_unit(
     parent_id: UUID,
     data: CreateOrgUnitRequest,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Cria unidade filha."""
     # Determina tipo baseado no parent
@@ -148,8 +146,8 @@ async def create_child_unit(
 @router.get("/units/{org_unit_id}", response_model=OrgUnitOut)
 async def get_org_unit(
     org_unit_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Retorna detalhes de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
@@ -177,8 +175,8 @@ async def get_org_unit(
 @router.get("/units/{org_unit_id}/members", response_model=MembersListResponse)
 async def list_members(
     org_unit_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Lista membros de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
@@ -221,8 +219,8 @@ async def list_members(
 async def send_member_invite(
     org_unit_id: UUID,
     data: SendInviteRequest,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Envia convite para participar da unidade."""
     try:
@@ -249,8 +247,8 @@ async def send_member_invite(
 @router.get("/units/{org_unit_id}/invites/pending", response_model=PendingInvitesResponse)
 async def list_pending_invites(
     org_unit_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Lista convites pendentes da unidade (só coordenador)."""
     try:
@@ -290,8 +288,8 @@ async def list_pending_invites(
 @router.post("/invites/{invite_id}/accept", response_model=InviteResponse)
 async def accept_invite(
     invite_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Aceita um convite."""
     try:
@@ -308,8 +306,8 @@ async def accept_invite(
 @router.post("/invites/{invite_id}/reject", response_model=InviteResponse)
 async def reject_invite(
     invite_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Rejeita um convite."""
     try:
@@ -329,8 +327,8 @@ async def reject_invite(
 
 @router.get("/my/invites", response_model=list[InviteDetailOut])
 async def get_my_pending_invites(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Lista convites pendentes do usuário logado."""
     from app.services.organization import get_user_pending_invites
@@ -367,8 +365,8 @@ async def get_my_pending_invites(
 
 @router.get("/my/memberships")
 async def get_my_memberships(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Lista memberships ativos do usuário."""
     from app.db.models import OrgMembership, MembershipStatus
@@ -390,9 +388,10 @@ async def get_my_memberships(
             "org_unit_name": m.org_unit.name,
             "org_unit_type": m.org_unit.type.value,
             "role": m.role.value,
+            "status": m.status.value,   # era ausente — mobile Membership.status ficava undefined
             "joined_at": m.joined_at.isoformat(),
         })
-    
+
     return result
 
 
@@ -403,9 +402,9 @@ async def get_my_memberships(
 @router.get("/units/{org_unit_id}/search-users")
 async def search_users_to_invite(
     org_unit_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
     q: str = "",
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """Busca usuários para convidar (exclui membros e convites pendentes)."""
     from app.services.organization import search_users_for_invite
@@ -435,8 +434,8 @@ async def update_member_role_endpoint(
     org_unit_id: UUID,
     member_user_id: UUID,
     role: str,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Atualiza papel de um membro (COORDINATOR ou MEMBER)."""
     from app.services.organization import update_member_role
@@ -461,8 +460,8 @@ async def update_member_role_endpoint(
 async def remove_member_endpoint(
     org_unit_id: UUID,
     member_user_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Remove um membro da unidade."""
     from app.services.organization import remove_member
@@ -477,8 +476,8 @@ async def remove_member_endpoint(
 @router.post("/units/{org_unit_id}/leave")
 async def leave_unit(
     org_unit_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Sai de uma unidade (remove a si mesmo)."""
     from app.services.organization import remove_member
@@ -493,8 +492,8 @@ async def leave_unit(
 @router.get("/units/{org_unit_id}/permissions")
 async def get_unit_permissions(
     org_unit_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    user: CurrentUser,
+    db: DBSession,
 ):
     """Retorna permissões do usuário na unidade."""
     from app.services.organization import get_user_permissions
