@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, ActivityIndicator, FlatList,
-  RefreshControl, Alert, Image, Switch,
+  RefreshControl, Alert, Image, Switch, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -232,17 +232,24 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut(auth);
-          router.replace('/(auth)/login');
+    if (Platform.OS === 'web') {
+      // Alert.alert não funciona no web — usa confirm nativo do browser
+      if (window.confirm('Deseja realmente sair da sua conta?')) {
+        signOut(auth).then(() => router.replace('/(auth)/login'));
+      }
+    } else {
+      Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sair',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut(auth);
+            router.replace('/(auth)/login');
+          },
         },
-      },
-    ]);
+      ]);
+    }
   };
 
   if (loading) {
