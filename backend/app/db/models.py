@@ -455,3 +455,27 @@ class UserPermission(Base):
     # Relationships
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
     granted_by: Mapped["User | None"] = relationship("User", foreign_keys=[granted_by_user_id])
+
+
+class SensitiveAccessRequest(Base):
+    """
+    Solicitação de acesso a dados sensíveis (CPF/RG) de outro usuário.
+    Criada por SECRETARY; aprovada/rejeitada por COUNCIL_GENERAL ou DEV.
+    """
+    __tablename__ = "sensitive_access_requests"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    requester_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="PENDING")
+    approved_by_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    requester: Mapped["User"] = relationship("User", foreign_keys=[requester_user_id])
+    target: Mapped["User"] = relationship("User", foreign_keys=[target_user_id])
+    approved_by: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by_user_id])

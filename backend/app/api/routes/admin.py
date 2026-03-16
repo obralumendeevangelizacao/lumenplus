@@ -15,7 +15,7 @@ from sqlalchemy import select, or_, func
 from app.api.deps import CurrentUser, DBSession
 from app.core.settings import settings
 from app.crypto.service import crypto_service
-from app.db.models import SensitiveAccessRequest, UserProfile, User, UserIdentity, UserGlobalRole, GlobalRole
+from app.db.models import SensitiveAccessRequest, UserProfile, User, UserIdentity
 from app.schemas import DocumentsResponse, ErrorResponse, SensitiveAccessRequestBody, SensitiveAccessResponse
 from app.services import RoleService, audit_sensitive_access, create_audit_log
 from app.services.organization import get_user_global_roles
