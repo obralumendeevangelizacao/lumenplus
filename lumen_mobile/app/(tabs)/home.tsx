@@ -149,7 +149,7 @@ export default function HomeScreen() {
           </View>
           <View style={styles.adminTextContainer}>
             <Text style={styles.adminTitle}>Administração</Text>
-            <Text style={styles.adminSubtitle}>Gerenciar avisos e comunicações</Text>
+            <Text style={styles.adminSubtitle}>Entidades, membros e comunicações</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.admin} />
         </TouchableOpacity>
