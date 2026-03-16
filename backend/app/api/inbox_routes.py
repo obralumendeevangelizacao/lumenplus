@@ -11,6 +11,7 @@ from fastapi.routing import APIRouter
 
 from app.api.deps import CurrentUser, DBSession
 from app.services.inbox_service import InboxService, PERMISSION_SEND_INBOX
+from app.services.organization import get_user_global_roles
 from app.schemas.inbox import (
     InboxSendRequest,
     InboxPreviewRequest,
@@ -135,9 +136,14 @@ def get_my_permissions(
     """Retorna permissões do usuário atual."""
     service = InboxService(db)
     permissions = service.get_user_permissions(current_user.id)
+    global_roles = get_user_global_roles(db, current_user.id)
+    has_admin = (
+        PERMISSION_SEND_INBOX in permissions
+        or any(r in global_roles for r in ["DEV", "ADMIN", "SECRETARY"])
+    )
     return UserPermissionsResponse(
         permissions=permissions,
-        has_admin_access=PERMISSION_SEND_INBOX in permissions,
+        has_admin_access=has_admin,
     )
 
 

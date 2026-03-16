@@ -50,16 +50,15 @@ export default function HomeScreen() {
       try {
         const profile = await api.get<{ full_name?: string }>('/profile');
         if (profile.full_name) {
-          const firstName = profile.full_name.trim().split(' ')[0];
-          setUserName(firstName);
-          return;
+          setUserName(profile.full_name.trim().split(' ')[0]);
+        } else {
+          const firebaseName = auth.currentUser?.displayName;
+          if (firebaseName) setUserName(firebaseName.trim().split(' ')[0]);
         }
       } catch {
         // Perfil ainda incompleto — tenta Firebase
-      }
-      const firebaseName = auth.currentUser?.displayName;
-      if (firebaseName) {
-        setUserName(firebaseName.trim().split(' ')[0]);
+        const firebaseName = auth.currentUser?.displayName;
+        if (firebaseName) setUserName(firebaseName.trim().split(' ')[0]);
       }
 
       // Verificar permissões de admin
