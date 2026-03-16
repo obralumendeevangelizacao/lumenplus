@@ -379,25 +379,31 @@ class InboxMessage(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[InboxMessageType] = mapped_column(
-        Enum(InboxMessageType, name="inbox_message_type", create_constraint=False), 
-        nullable=False, 
+        Enum(InboxMessageType, name="inbox_message_type", create_constraint=False),
+        nullable=False,
         default=InboxMessageType.INFO,
-        server_default="info"
+        server_default="INFO"
     )
     
-    # Anexos (URLs de imagens ou links)
-    attachments: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    
-    # Filtros usados para segmentação (guardamos para histórico)
+    # Anexos (lista de {type, url, title?} — armazenada como array JSON)
+    attachments: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+
+    # Filtros usados para segmentação (guardamos para histórico — objeto JSON)
     filters: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    
+
+    # Escopo organizacional alvo (preenchido quando enviado por coordenador)
+    target_org_unit_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("org_units.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Quem enviou
     created_by_user_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    
+
     # Relationships
     created_by: Mapped["User"] = relationship("User", foreign_keys=[created_by_user_id])
+    target_org_unit: Mapped["OrgUnit | None"] = relationship("OrgUnit", foreign_keys=[target_org_unit_id])
     recipients: Mapped[list["InboxRecipient"]] = relationship("InboxRecipient", back_populates="message", cascade="all, delete-orphan")
 
 

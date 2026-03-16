@@ -1,462 +1,460 @@
 /**
  * Register Screen
  * ===============
- * Tela de cadastro com todos os campos necessários.
+ * Cadastro em 3 passos:
+ *  1. Dados da conta (nome, email, senha)
+ *  2. Dados pessoais (telefone, nascimento, UF, cidade)
+ *  3. Dados vocacionais (estado de vida, estado civil, realidade vocacional)
+ *
+ * Após criação da conta Firebase, salva o perfil completo no backend.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
+  View, Text, StyleSheet, TextInput, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, StatusBar, Modal, FlatList,
 } from 'react-native';
 import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import api from '@/services/api';
+import { Ionicons } from '@expo/vector-icons';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { auth } from '@/config/firebase';
+import { profileService } from '@/services';
+import type { CatalogItem } from '@/types';
 
 const colors = {
-  primary: '#1a365d',
+  primary: '#1A859B',
   white: '#ffffff',
+  orange: '#F5A623',
   gray: '#6b7280',
-  lightGray: '#f3f4f6',
+  inputBg: 'rgba(255, 255, 255, 0.9)',
   error: '#ef4444',
-  success: '#22c55e',
 };
+
+const BR_STATES = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO',
+  'MA','MT','MS','MG','PA','PB','PR','PE','PI',
+  'RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+];
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [firebaseError, setFirebaseError] = useState('');
 
-  // Step 1: Dados básicos
+  // Catálogos carregados do backend
+  const [lifeStates, setLifeStates] = useState<CatalogItem[]>([]);
+  const [maritalStatuses, setMaritalStatuses] = useState<CatalogItem[]>([]);
+  const [vocationalRealities, setVocationalRealities] = useState<CatalogItem[]>([]);
+  const [loadingCatalogs, setLoadingCatalogs] = useState(false);
+
+  // Passo 1 — Conta
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Step 2: Telefone
+  // Passo 2 — Pessoal
   const [phone, setPhone] = useState('');
-  const [verificationMethod, setVerificationMethod] = useState<'WHATSAPP' | 'SMS'>('WHATSAPP');
+  const [birthDate, setBirthDate] = useState('');
+  const [uf, setUf] = useState('');
+  const [city, setCity] = useState('');
+
+  // Passo 3 — Vocacional
+  const [selectedLifeState, setSelectedLifeState] = useState<CatalogItem | null>(null);
+  const [selectedMarital, setSelectedMarital] = useState<CatalogItem | null>(null);
+  const [selectedVocational, setSelectedVocational] = useState<CatalogItem | null>(null);
+
+  // Modais
+  const [stateModalVisible, setStateModalVisible] = useState(false);
+  const [catalogModalVisible, setCatalogModalVisible] = useState(false);
+  const [catalogModalTitle, setCatalogModalTitle] = useState('');
+  const [catalogModalOptions, setCatalogModalOptions] = useState<CatalogItem[]>([]);
+  const [catalogModalOnSelect, setCatalogModalOnSelect] = useState<(item: CatalogItem) => void>(() => () => {});
+
+  useEffect(() => {
+    if (step === 3 && lifeStates.length === 0) loadCatalogs();
+  }, [step]);
+
+  const loadCatalogs = async () => {
+    setLoadingCatalogs(true);
+    try {
+      const catalogs = await profileService.getCatalogs();
+      const find = (code: string) => catalogs.find(c => c.code === code)?.items ?? [];
+      setLifeStates(find('LIFE_STATE'));
+      setMaritalStatuses(find('MARITAL_STATUS'));
+      setVocationalRealities(find('VOCATIONAL_REALITY'));
+    } catch {
+      // silencioso — usuário pode preencher depois no perfil
+    } finally {
+      setLoadingCatalogs(false);
+    }
+  };
+
+  const formatPhone = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 2) return d;
+    if (d.length <= 6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  };
+
+  const formatDate = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 8);
+    if (d.length <= 2) return d;
+    if (d.length <= 4) return `${d.slice(0,2)}/${d.slice(2)}`;
+    return `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`;
+  };
+
+  const openCatalogModal = (title: string, options: CatalogItem[], onSelect: (item: CatalogItem) => void) => {
+    setCatalogModalTitle(title);
+    setCatalogModalOptions(options);
+    setCatalogModalOnSelect(() => onSelect);
+    setCatalogModalVisible(true);
+  };
 
   const validateStep1 = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!fullName.trim() || fullName.trim().length < 3) {
-      newErrors.fullName = 'Nome deve ter pelo menos 3 caracteres';
-    }
-
-    if (!email.includes('@') || !email.includes('.')) {
-      newErrors.email = 'Email inválido';
-    }
-
-    if (password.length < 6) {
-      newErrors.password = 'Senha deve ter pelo menos 6 caracteres';
-    }
-
-    if (password !== confirmPassword) {
-      newErrors.confirmPassword = 'Senhas não conferem';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const e: Record<string, string> = {};
+    if (fullName.trim().length < 3) e.fullName = 'Nome deve ter pelo menos 3 caracteres';
+    if (!email.includes('@') || !email.includes('.')) e.email = 'Email inválido';
+    if (password.length < 6) e.password = 'Senha deve ter pelo menos 6 caracteres';
+    if (password !== confirmPassword) e.confirmPassword = 'Senhas não conferem';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
   const validateStep2 = () => {
-    const newErrors: Record<string, string> = {};
-    const phoneDigits = phone.replace(/\D/g, '');
-
-    if (phoneDigits.length < 10 || phoneDigits.length > 11) {
-      newErrors.phone = 'Telefone inválido';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const e: Record<string, string> = {};
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10) e.phone = 'Telefone inválido';
+    const parts = birthDate.split('/');
+    if (parts.length !== 3 || parts[2]?.length !== 4) e.birthDate = 'Data inválida (DD/MM/AAAA)';
+    if (!uf) e.uf = 'Selecione o estado';
+    if (city.trim().length < 2) e.city = 'Informe a cidade';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const formatPhone = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 11);
-    
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
-  };
-
-  const handleNextStep = () => {
-    if (step === 1 && validateStep1()) {
-      setStep(2);
-    }
+  const handleNext = () => {
+    if (step === 1 && validateStep1()) setStep(2);
+    else if (step === 2 && validateStep2()) setStep(3);
   };
 
   const handleRegister = async () => {
-    if (!validateStep2()) return;
-
+    setFirebaseError('');
+    setIsLoading(true);
     try {
-      setIsLoading(true);
+      // 1. Cria conta Firebase
+      const credential = await createUserWithEmailAndPassword(
+        auth, email.trim().toLowerCase(), password,
+      );
+      await updateProfile(credential.user, { displayName: fullName.trim() });
 
-      // Formata telefone para E.164
-      const phoneDigits = phone.replace(/\D/g, '');
-      const phoneE164 = `+55${phoneDigits}`;
+      // 2. Monta data ISO e telefone E.164
+      const [dd, mm, yyyy] = birthDate.split('/');
+      const birthIso = `${yyyy}-${mm}-${dd}`;
+      const phoneE164 = `+55${phone.replace(/\D/g, '')}`;
 
-      // Registra usuário
-      const response = await api.post<{ access_token: string; user_id: string }>('/auth/register', {
-        email: email.trim().toLowerCase(),
-        password,
-        full_name: fullName.trim(),
-      });
+      // 3. Salva perfil (Firebase já autenticou → token disponível)
+      try {
+        await profileService.updateProfile({
+          full_name: fullName.trim(),
+          birth_date: birthIso,
+          phone_e164: phoneE164,
+          city: city.trim(),
+          state: uf,
+          life_state_item_id: selectedLifeState?.id,
+          marital_status_item_id: selectedMarital?.id,
+          vocational_reality_item_id: selectedVocational?.id,
+        });
+      } catch {
+        // Erro no perfil não impede o acesso ao app
+      }
 
-      // Salva token
-      await SecureStore.setItemAsync('auth_token', response.access_token);
-
-      // Navega para verificação de telefone
-      router.push({
-        pathname: '/(auth)/verify-phone',
-        params: { phone: phoneE164, method: verificationMethod },
-      });
-    } catch (err: any) {
-      const message = err.response?.data?.detail?.message || 'Erro ao criar conta';
-      Alert.alert('Erro', message);
+      router.replace('/(tabs)/home');
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code ?? '';
+      if (code === 'auth/email-already-in-use') {
+        setFirebaseError('Este email já está cadastrado. Tente fazer login.');
+        setStep(1);
+      } else if (code === 'auth/weak-password') {
+        setFirebaseError('Senha fraca. Use pelo menos 6 caracteres.');
+        setStep(1);
+      } else if (code === 'auth/invalid-email') {
+        setFirebaseError('Email inválido.');
+        setStep(1);
+      } else if (code === 'auth/network-request-failed') {
+        setFirebaseError('Sem conexão. Verifique sua internet.');
+      } else if (code) {
+        setFirebaseError(`Erro ao criar conta: ${code}`);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDevRegister = async () => {
-    // DEV mode - pula verificações
-    if (!validateStep1()) return;
-
-    try {
-      setIsLoading(true);
-
-      const devToken = `dev:${email.split('@')[0]}:${email.trim().toLowerCase()}`;
-      await SecureStore.setItemAsync('auth_token', devToken);
-
-      // Navega para completar perfil
-      router.replace('/(onboarding)/profile');
-    } catch (err) {
-      Alert.alert('Erro', 'Erro ao criar conta');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const stepTitles = ['Criar Conta', 'Dados Pessoais', 'Dados Vocacionais'];
+  const stepSubtitles = [
+    'Preencha seus dados para começar',
+    'Como podemos te encontrar?',
+    'Sua realidade na comunidade',
+  ];
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()}>
-            <Text style={styles.backButton}>← Voltar</Text>
-          </TouchableOpacity>
-          <Text style={styles.stepIndicator}>Passo {step} de 2</Text>
-        </View>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+      <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.title}>
-          {step === 1 ? 'Criar Conta' : 'Verificar Telefone'}
-        </Text>
-        <Text style={styles.subtitle}>
-          {step === 1 
-            ? 'Preencha seus dados para começar'
-            : 'Precisamos verificar seu número'}
-        </Text>
-
-        {/* Step 1: Dados básicos */}
-        {step === 1 && (
-          <View style={styles.form}>
-            <Text style={styles.label}>Nome completo</Text>
-            <TextInput
-              style={[styles.input, errors.fullName && styles.inputError]}
-              placeholder="Seu nome completo"
-              value={fullName}
-              onChangeText={(text) => {
-                setFullName(text);
-                setErrors({ ...errors, fullName: '' });
-              }}
-              autoCapitalize="words"
-              placeholderTextColor={colors.gray}
-            />
-            {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
-
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={[styles.input, errors.email && styles.inputError]}
-              placeholder="seu@email.com"
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                setErrors({ ...errors, email: '' });
-              }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              placeholderTextColor={colors.gray}
-            />
-            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
-
-            <Text style={styles.label}>Senha</Text>
-            <TextInput
-              style={[styles.input, errors.password && styles.inputError]}
-              placeholder="Mínimo 6 caracteres"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setErrors({ ...errors, password: '' });
-              }}
-              secureTextEntry
-              placeholderTextColor={colors.gray}
-            />
-            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
-
-            <Text style={styles.label}>Confirmar senha</Text>
-            <TextInput
-              style={[styles.input, errors.confirmPassword && styles.inputError]}
-              placeholder="Digite a senha novamente"
-              value={confirmPassword}
-              onChangeText={(text) => {
-                setConfirmPassword(text);
-                setErrors({ ...errors, confirmPassword: '' });
-              }}
-              secureTextEntry
-              placeholderTextColor={colors.gray}
-            />
-            {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
-
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleNextStep}
-            >
-              <Text style={styles.primaryButtonText}>Continuar</Text>
+          {/* Header com indicador de passos */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => step > 1 ? setStep(step - 1) : router.back()}>
+              <Ionicons name="arrow-back" size={24} color={colors.white} />
             </TouchableOpacity>
-
-            {/* DEV mode shortcut */}
-            <TouchableOpacity
-              style={styles.devButton}
-              onPress={handleDevRegister}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={colors.primary} />
-              ) : (
-                <Text style={styles.devButtonText}>🛠️ DEV: Pular verificações</Text>
-              )}
-            </TouchableOpacity>
+            <View style={styles.stepIndicator}>
+              {[1,2,3].map((s, i) => (
+                <View key={s} style={styles.stepRow}>
+                  <View style={[styles.stepDot, step >= s && styles.stepDotActive]} />
+                  {i < 2 && <View style={[styles.stepLine, step > s && styles.stepLineActive]} />}
+                </View>
+              ))}
+            </View>
           </View>
-        )}
 
-        {/* Step 2: Telefone */}
-        {step === 2 && (
-          <View style={styles.form}>
-            <Text style={styles.label}>Telefone (WhatsApp)</Text>
-            <TextInput
-              style={[styles.input, errors.phone && styles.inputError]}
-              placeholder="(00) 00000-0000"
-              value={phone}
-              onChangeText={(text) => {
-                setPhone(formatPhone(text));
-                setErrors({ ...errors, phone: '' });
-              }}
-              keyboardType="phone-pad"
-              placeholderTextColor={colors.gray}
-            />
-            {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+          {/* Logo e título */}
+          <View style={styles.logoSection}>
+            <Ionicons name="compass-outline" size={56} color={colors.white} />
+            <Text style={styles.title}>{stepTitles[step - 1]}</Text>
+            <Text style={styles.subtitle}>{stepSubtitles[step - 1]}</Text>
+          </View>
 
-            <Text style={styles.label}>Como deseja receber o código?</Text>
-            <View style={styles.methodButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.methodButton,
-                  verificationMethod === 'WHATSAPP' && styles.methodButtonActive,
-                ]}
-                onPress={() => setVerificationMethod('WHATSAPP')}
-              >
-                <Text style={[
-                  styles.methodButtonText,
-                  verificationMethod === 'WHATSAPP' && styles.methodButtonTextActive,
-                ]}>
-                  📱 WhatsApp
-                </Text>
-              </TouchableOpacity>
+          {/* ── PASSO 1: Conta ── */}
+          {step === 1 && (
+            <View style={styles.form}>
+              <TextInput style={[styles.input, errors.fullName && styles.inputError]}
+                placeholder="Nome completo" value={fullName} placeholderTextColor={colors.gray}
+                onChangeText={t => { setFullName(t); setErrors({...errors, fullName: ''}); }}
+                autoCapitalize="words" />
+              {errors.fullName ? <Text style={styles.errorText}>{errors.fullName}</Text> : null}
 
-              <TouchableOpacity
-                style={[
-                  styles.methodButton,
-                  verificationMethod === 'SMS' && styles.methodButtonActive,
-                ]}
-                onPress={() => setVerificationMethod('SMS')}
-              >
-                <Text style={[
-                  styles.methodButtonText,
-                  verificationMethod === 'SMS' && styles.methodButtonTextActive,
-                ]}>
-                  💬 SMS
-                </Text>
+              <TextInput style={[styles.input, errors.email && styles.inputError]}
+                placeholder="E-mail" value={email} placeholderTextColor={colors.gray}
+                onChangeText={t => { setEmail(t); setErrors({...errors, email: ''}); }}
+                keyboardType="email-address" autoCapitalize="none" />
+              {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+
+              <TextInput style={[styles.input, errors.password && styles.inputError]}
+                placeholder="Senha (mínimo 6 caracteres)" value={password} placeholderTextColor={colors.gray}
+                onChangeText={t => { setPassword(t); setErrors({...errors, password: ''}); }}
+                secureTextEntry />
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
+
+              <TextInput style={[styles.input, errors.confirmPassword && styles.inputError]}
+                placeholder="Confirmar senha" value={confirmPassword} placeholderTextColor={colors.gray}
+                onChangeText={t => { setConfirmPassword(t); setErrors({...errors, confirmPassword: ''}); }}
+                secureTextEntry />
+              {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
+
+              {firebaseError ? <View style={styles.errorBox}><Text style={styles.errorBoxText}>⚠️ {firebaseError}</Text></View> : null}
+
+              <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
+                <Text style={styles.primaryButtonText}>Continuar</Text>
               </TouchableOpacity>
             </View>
+          )}
 
-            <TouchableOpacity
-              style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-              onPress={handleRegister}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={colors.white} />
+          {/* ── PASSO 2: Pessoal ── */}
+          {step === 2 && (
+            <View style={styles.form}>
+              <TextInput style={[styles.input, errors.phone && styles.inputError]}
+                placeholder="Telefone (WhatsApp)" value={phone} placeholderTextColor={colors.gray}
+                onChangeText={t => { setPhone(formatPhone(t)); setErrors({...errors, phone: ''}); }}
+                keyboardType="phone-pad" />
+              {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
+
+              <TextInput style={[styles.input, errors.birthDate && styles.inputError]}
+                placeholder="Data de nascimento (DD/MM/AAAA)" value={birthDate} placeholderTextColor={colors.gray}
+                onChangeText={t => { setBirthDate(formatDate(t)); setErrors({...errors, birthDate: ''}); }}
+                keyboardType="numeric" />
+              {errors.birthDate ? <Text style={styles.errorText}>{errors.birthDate}</Text> : null}
+
+              <TouchableOpacity style={[styles.input, styles.selector, errors.uf && styles.inputError]}
+                onPress={() => setStateModalVisible(true)}>
+                <Text style={[styles.selectorText, !uf && styles.selectorPlaceholder]}>{uf || 'Estado (UF)'}</Text>
+                <Ionicons name="chevron-down" size={18} color={colors.gray} />
+              </TouchableOpacity>
+              {errors.uf ? <Text style={styles.errorText}>{errors.uf}</Text> : null}
+
+              <TextInput style={[styles.input, errors.city && styles.inputError]}
+                placeholder="Cidade" value={city} placeholderTextColor={colors.gray}
+                onChangeText={t => { setCity(t); setErrors({...errors, city: ''}); }}
+                autoCapitalize="words" />
+              {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
+
+              <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
+                <Text style={styles.primaryButtonText}>Continuar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── PASSO 3: Vocacional ── */}
+          {step === 3 && (
+            <View style={styles.form}>
+              {loadingCatalogs ? (
+                <ActivityIndicator color={colors.white} style={{ marginVertical: 24 }} />
               ) : (
-                <Text style={styles.primaryButtonText}>Enviar Código</Text>
+                <>
+                  <TouchableOpacity style={[styles.input, styles.selector]}
+                    onPress={() => openCatalogModal('Estado de Vida', lifeStates, item => { setSelectedLifeState(item); setCatalogModalVisible(false); })}>
+                    <Text style={[styles.selectorText, !selectedLifeState && styles.selectorPlaceholder]}>
+                      {selectedLifeState?.label || 'Estado de Vida'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.gray} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.input, styles.selector]}
+                    onPress={() => openCatalogModal('Estado Civil', maritalStatuses, item => { setSelectedMarital(item); setCatalogModalVisible(false); })}>
+                    <Text style={[styles.selectorText, !selectedMarital && styles.selectorPlaceholder]}>
+                      {selectedMarital?.label || 'Estado Civil'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.gray} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.input, styles.selector]}
+                    onPress={() => openCatalogModal('Realidade Vocacional', vocationalRealities, item => { setSelectedVocational(item); setCatalogModalVisible(false); })}>
+                    <Text style={[styles.selectorText, !selectedVocational && styles.selectorPlaceholder]}>
+                      {selectedVocational?.label || 'Realidade Vocacional'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.gray} />
+                  </TouchableOpacity>
+                </>
               )}
+
+              <Text style={styles.skipNote}>* Campos opcionais. Você pode preencher depois no perfil.</Text>
+
+              {firebaseError ? <View style={styles.errorBox}><Text style={styles.errorBoxText}>⚠️ {firebaseError}</Text></View> : null}
+
+              <TouchableOpacity style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+                onPress={handleRegister} disabled={isLoading}>
+                {isLoading
+                  ? <ActivityIndicator color={colors.white} />
+                  : <Text style={styles.primaryButtonText}>Criar Conta</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Já tem uma conta? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+              <Text style={styles.footerLink}>Entrar</Text>
             </TouchableOpacity>
           </View>
-        )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-        {/* Link para login */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Já tem uma conta?</Text>
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text style={styles.footerLink}> Entrar</Text>
-          </TouchableOpacity>
+      {/* Modal — Seletor de UF */}
+      <Modal visible={stateModalVisible} animationType="slide" transparent onRequestClose={() => setStateModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Estado (UF)</Text>
+              <TouchableOpacity onPress={() => setStateModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.gray} />
+              </TouchableOpacity>
+            </View>
+            <FlatList data={BR_STATES} keyExtractor={item => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={[styles.modalItem, uf === item && styles.modalItemSelected]}
+                  onPress={() => { setUf(item); setErrors({...errors, uf: ''}); setStateModalVisible(false); }}>
+                  <Text style={[styles.modalItemText, uf === item && styles.modalItemTextSelected]}>{item}</Text>
+                  {uf === item && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal — Seletor de Catálogo */}
+      <Modal visible={catalogModalVisible} animationType="slide" transparent onRequestClose={() => setCatalogModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{catalogModalTitle}</Text>
+              <TouchableOpacity onPress={() => setCatalogModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.gray} />
+              </TouchableOpacity>
+            </View>
+            <FlatList data={catalogModalOptions} keyExtractor={item => item.id}
+              renderItem={({ item }) => {
+                const isSelected =
+                  (catalogModalTitle === 'Estado de Vida' && selectedLifeState?.id === item.id) ||
+                  (catalogModalTitle === 'Estado Civil' && selectedMarital?.id === item.id) ||
+                  (catalogModalTitle === 'Realidade Vocacional' && selectedVocational?.id === item.id);
+                return (
+                  <TouchableOpacity style={[styles.modalItem, isSelected && styles.modalItemSelected]}
+                    onPress={() => catalogModalOnSelect(item)}>
+                    <Text style={[styles.modalItemText, isSelected && styles.modalItemTextSelected]}>{item.label}</Text>
+                    {isSelected && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 32,
-    paddingTop: 20,
-  },
-  backButton: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  stepIndicator: {
-    fontSize: 14,
-    color: colors.gray,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#171717',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.gray,
-    marginBottom: 32,
-  },
-  form: {
-    flex: 1,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#171717',
-    marginBottom: 8,
-    marginTop: 16,
-  },
+  container: { flex: 1, backgroundColor: colors.primary },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 50, paddingBottom: 40 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  backButton: { padding: 8, marginLeft: -8 },
+  stepIndicator: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingRight: 32 },
+  stepRow: { flexDirection: 'row', alignItems: 'center' },
+  stepDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.3)' },
+  stepDotActive: { backgroundColor: colors.white },
+  stepLine: { width: 32, height: 2, backgroundColor: 'rgba(255,255,255,0.3)', marginHorizontal: 6 },
+  stepLineActive: { backgroundColor: colors.white },
+  logoSection: { alignItems: 'center', marginBottom: 28, gap: 8 },
+  title: { fontSize: 26, fontWeight: 'bold', color: colors.white },
+  subtitle: { fontSize: 15, color: colors.white, opacity: 0.85, textAlign: 'center' },
+  form: { flex: 1 },
   input: {
-    backgroundColor: colors.lightGray,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
+    backgroundColor: colors.inputBg, borderRadius: 25,
+    paddingHorizontal: 20, paddingVertical: 14,
+    fontSize: 16, marginBottom: 12, color: '#333',
   },
-  inputError: {
-    borderColor: colors.error,
-  },
-  errorText: {
-    color: colors.error,
-    fontSize: 13,
-    marginTop: 4,
-  },
+  inputError: { borderWidth: 2, borderColor: colors.error, marginBottom: 4 },
+  selector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  selectorText: { fontSize: 16, color: '#333', flex: 1 },
+  selectorPlaceholder: { color: colors.gray },
+  errorText: { color: '#fecaca', fontSize: 13, marginBottom: 10, marginLeft: 16 },
+  skipNote: { color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'center', marginBottom: 12, marginTop: 4 },
+  errorBox: { backgroundColor: '#FEE2E2', borderRadius: 8, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FECACA' },
+  errorBoxText: { color: '#B91C1C', fontSize: 13, textAlign: 'center' },
   primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 18,
-    alignItems: 'center',
-    marginTop: 32,
+    backgroundColor: colors.orange, borderRadius: 25, paddingVertical: 16,
+    alignItems: 'center', marginTop: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  devButton: {
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: '#fef3c7',
-    borderRadius: 12,
-  },
-  devButtonText: {
-    color: colors.gray,
-    fontSize: 14,
-  },
-  methodButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
-  },
-  methodButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#e5e5e5',
-    alignItems: 'center',
-  },
-  methodButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: '#eff6ff',
-  },
-  methodButtonText: {
-    fontSize: 16,
-    color: colors.gray,
-    fontWeight: '500',
-  },
-  methodButtonTextActive: {
-    color: colors.primary,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
-  footerText: {
-    fontSize: 14,
-    color: colors.gray,
-  },
-  footerLink: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  buttonDisabled: { opacity: 0.6 },
+  primaryButtonText: { color: colors.white, fontSize: 18, fontWeight: '600' },
+  footer: { flexDirection: 'row', justifyContent: 'center', paddingTop: 20 },
+  footerText: { fontSize: 14, color: colors.white },
+  footerLink: { fontSize: 14, color: colors.white, fontWeight: 'bold', textDecorationLine: 'underline' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '65%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
+  modalTitle: { fontSize: 18, fontWeight: '600', color: '#171717' },
+  modalItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  modalItemSelected: { backgroundColor: 'rgba(26,133,155,0.08)' },
+  modalItemText: { fontSize: 16, color: '#171717' },
+  modalItemTextSelected: { color: colors.primary, fontWeight: '600' },
 });

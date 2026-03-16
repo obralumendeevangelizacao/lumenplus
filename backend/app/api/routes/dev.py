@@ -16,7 +16,7 @@ from app.db.session import get_db
 from app.db.models import (
     User, UserProfile, UserIdentity, GlobalRole, UserGlobalRole,
     OrgUnit, OrgUnitType, Visibility, OrgMembership, OrgRoleCode, MembershipStatus,
-    LegalDocument,
+    LegalDocument, ProfileCatalog, ProfileCatalogItem,
 )
 from app.api.routes.auth import get_current_user
 
@@ -58,9 +58,36 @@ async def seed_database(db: Session = Depends(get_db)):
             db.add(LegalDocument(type=doc_type, version=version, content=content))
             results["legal_docs"] += 1
     
+    # Profile Catalogs
+    catalogs_seed = [
+        ("LIFE_STATE", "Estado de Vida", [
+            "Leigo", "Leigo Consagrado", "Novica", "Seminarista", "Religioso",
+            "Diacono Permanente", "Diacono", "Sacerdote Religioso", "Sacerdote Diocesano", "Bispo",
+        ]),
+        ("MARITAL_STATUS", "Estado Civil", [
+            "Solteiro", "Noivo", "Casado", "Divorciado", "Viuvo", "Uniao Estavel",
+        ]),
+        ("VOCATIONAL_REALITY", "Realidade Vocacional", [
+            "Membro do Acolhida", "Membro do Aprofundamento", "Vocacional",
+            "Postulante de Primeiro Ano", "Postulante de Segundo Ano",
+            "Discipulo Vocacional", "Consagrado Filho da Luz",
+        ]),
+    ]
+    existing_catalogs = {c.code for c in db.execute(select(ProfileCatalog)).scalars().all()}
+    for code, name, items in catalogs_seed:
+        if code not in existing_catalogs:
+            catalog = ProfileCatalog(code=code, name=name)
+            db.add(catalog)
+            db.flush()
+            results["catalogs"] = results.get("catalogs", 0) + 1
+            for i, label in enumerate(items):
+                item_code = label.upper().replace(" ", "_")[:50]
+                db.add(ProfileCatalogItem(catalog_id=catalog.id, code=item_code, label=label, sort_order=i))
+                results["catalog_items"] = results.get("catalog_items", 0) + 1
+
     db.commit()
-    
-    return {"message": "Seed concluído", "results": results}
+
+    return {"message": "Seed concluido", "results": results}
 
 
 @router.post("/create-conselho-geral")

@@ -15,8 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia código
 COPY . .
 
-# Expõe porta
+# Torna o script de start executável
+RUN chmod +x /app/start.sh
+
+# Expõe porta (Railway injeta PORT automaticamente)
 EXPOSE 8000
 
-# Comando
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Produção: roda migrations e sobe o servidor
+CMD ["/app/start.sh"]

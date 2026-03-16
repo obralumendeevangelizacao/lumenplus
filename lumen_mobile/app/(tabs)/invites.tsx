@@ -6,19 +6,22 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
   RefreshControl,
   Modal,
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import api from '@/services/api';
+import { router } from 'expo-router';
+import { auth } from '@/config/firebase';
+import { inboxService } from '@/services';
+import type { InboxListResponse } from '@/types';
 
 const colors = {
   primary: '#1A859B',
@@ -32,7 +35,8 @@ const colors = {
 };
 
 interface Aviso {
-  id: string;
+  id: string;         // InboxRecipient.id — usar para PATCH /{id}/read
+  message_id: string; // InboxMessage.id — identificador da mensagem
   title: string;
   message: string;
   type: 'info' | 'warning' | 'success' | 'urgent';
@@ -47,18 +51,31 @@ export default function InboxScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedAviso, setSelectedAviso] = useState<Aviso | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [canSend, setCanSend] = useState(false);
 
   useEffect(() => {
     loadAvisos();
+    checkSendPermission();
   }, []);
+
+  const checkSendPermission = async () => {
+    try {
+      await auth.authStateReady();
+      const data = await inboxService.getSendableScopes();
+      setCanSend(data.can_send_to_all || data.scopes.length > 0);
+    } catch {
+      setCanSend(false);
+    }
+  };
 
   const loadAvisos = async () => {
     try {
-      const response = await api.get('/inbox');
-      setAvisos(response.data || []);
+      // inboxService.getInbox() retorna InboxListResponse: { messages, total, unread_count }
+      // O api client retorna o JSON diretamente — sem wrapper .data
+      const response = await inboxService.getInbox();
+      setAvisos((response.messages || []) as Aviso[]);
     } catch (error) {
       console.log('Erro ao carregar avisos:', error);
-      // Mock data para demonstração enquanto API não existe
       setAvisos([]);
     } finally {
       setLoading(false);
@@ -75,11 +92,12 @@ export default function InboxScreen() {
     setSelectedAviso(aviso);
     setModalVisible(true);
 
-    // Marcar como lido
+    // Marcar como lido (idempotente — 200 mesmo se já lido)
     if (!aviso.read) {
       try {
-        await api.patch(`/inbox/${aviso.id}/read`);
-        setAvisos(prev => 
+        // aviso.id é InboxRecipient.id — correto para o endpoint PATCH /{id}/read
+        await inboxService.markAsRead(aviso.id);
+        setAvisos(prev =>
           prev.map(a => a.id === aviso.id ? { ...a, read: true } : a)
         );
       } catch (error) {
@@ -213,6 +231,18 @@ export default function InboxScreen() {
         ListEmptyComponent={renderEmpty}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
+
+      {/* FAB Enviar Aviso */}
+      {canSend && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => router.push('/admin/create-aviso')}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="megaphone" size={22} color="#ffffff" />
+          <Text style={styles.fabText}>Enviar Aviso</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Modal de Detalhes */}
       <Modal
@@ -452,6 +482,28 @@ const styles = StyleSheet.create({
   modalButtonText: {
     color: colors.white,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#7c3aed',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderRadius: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabText: {
+    color: '#ffffff',
+    fontSize: 15,
     fontWeight: '600',
   },
 });

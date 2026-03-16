@@ -1,7 +1,7 @@
 """
 Verification Schemas
 ====================
-Schemas para verificação de telefone.
+Schemas para verificação de telefone e e-mail.
 """
 
 from datetime import datetime
@@ -11,6 +11,10 @@ from pydantic import Field
 
 from app.schemas.base import BaseSchema
 
+
+# =============================================================================
+# PHONE
+# =============================================================================
 
 class StartVerificationRequest(BaseSchema):
     """Request para iniciar verificação de telefone."""
@@ -37,6 +41,38 @@ class ConfirmVerificationRequest(BaseSchema):
 
 class ConfirmVerificationResponse(BaseSchema):
     """Response após confirmar verificação."""
-    
+
+    verified: bool
+    message: str
+
+
+# =============================================================================
+# EMAIL
+# =============================================================================
+
+class StartEmailVerificationRequest(BaseSchema):
+    """Request para iniciar verificação de e-mail."""
+
+    email: str = Field(..., pattern=r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+class StartEmailVerificationResponse(BaseSchema):
+    """Response após iniciar verificação de e-mail."""
+
+    verification_id: UUID
+    expires_at: datetime
+    # debug_token só aparece quando DEBUG_VERIFICATION_CODE=true em DEV
+    debug_token: str | None = None
+
+
+class ConfirmEmailVerificationRequest(BaseSchema):
+    """Request para confirmar token de e-mail."""
+
+    token: str = Field(..., min_length=32, max_length=200)
+
+
+class EmailVerificationResponse(BaseSchema):
+    """Response após confirmar verificação de e-mail."""
+
     verified: bool
     message: str

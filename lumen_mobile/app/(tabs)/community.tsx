@@ -4,12 +4,12 @@
  * Tela de grupos - Em construção.
  */
 
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 const colors = {
   primary: '#1A859B',
-  white: '#ffffff',
   gray: '#6b7280',
   lightGray: '#E8E8E8',
 };
@@ -21,12 +21,12 @@ export default function CommunityScreen() {
         <View style={styles.iconContainer}>
           <Ionicons name="construct-outline" size={64} color={colors.primary} />
         </View>
-        <Text style={styles.title}>Em Construção</Text>
+        <Text style={styles.title}>Em Construcao</Text>
         <Text style={styles.description}>
-          Esta funcionalidade será adicionada em breve.
+          Esta funcionalidade sera adicionada em breve.
         </Text>
         <Text style={styles.hint}>
-          Aqui você poderá acompanhar as novidades do seu grupo da sua realidade vocacional. Contamos com sua oração.
+          Aqui voce podera acompanhar as novidades do seu grupo da sua realidade vocacional. Contamos com sua oracao.
         </Text>
       </View>
     </View>

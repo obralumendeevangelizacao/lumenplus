@@ -19,19 +19,19 @@ class ProfileUpdateRequest(BaseSchema):
     # Dados básicos
     full_name: str = Field(..., min_length=2, max_length=200)
     birth_date: date
-    cpf: str = Field(..., min_length=11, max_length=14)
-    rg: str = Field(..., min_length=5, max_length=20)
+    cpf: Optional[str] = Field(None, min_length=11, max_length=14)
+    rg: Optional[str] = Field(None, min_length=5, max_length=20)
     phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
     city: str = Field(..., min_length=2, max_length=100)
     state: str = Field(..., min_length=2, max_length=2)
-    
+
     # Foto (URL ou base64)
     photo_url: Optional[str] = None
-    
+
     # Catálogos
-    life_state_item_id: UUID
-    marital_status_item_id: UUID
-    vocational_reality_item_id: UUID
+    life_state_item_id: Optional[UUID] = None
+    marital_status_item_id: Optional[UUID] = None
+    vocational_reality_item_id: Optional[UUID] = None
     
     # Ano de consagração (obrigatório se CONSAGRADO_FILHO_DA_LUZ)
     consecration_year: Optional[int] = Field(None, ge=1900, le=2100)

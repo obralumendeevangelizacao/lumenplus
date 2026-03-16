@@ -2,64 +2,67 @@
  * API Client
  * ==========
  * Cliente HTTP usando fetch nativo (sem axios).
+ * Tokens são obtidos diretamente do Firebase Auth (sem SecureStore manual).
  */
 
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/config/firebase';
 
 // URL do backend
+// Em produção: usa EXPO_PUBLIC_API_URL (injetado pelo Vercel/EAS no build)
+// Em dev: usa localhost (ou 10.0.2.2 para emulador Android)
 const getBaseUrl = () => {
-  if (!__DEV__) return 'https://api.lumenplus.app';
-  
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8000';
+  if (!__DEV__) {
+    return process.env.EXPO_PUBLIC_API_URL ?? 'https://api.lumenplus.app';
   }
+  // Android Emulator: 10.0.2.2 aponta para o localhost da máquina host
+  // iOS Simulator / Web: localhost funciona diretamente
+  if (Platform.OS === 'android') return 'http://10.0.2.2:8000';
   return 'http://localhost:8000';
 };
 
 const API_BASE_URL = getBaseUrl();
-const TOKEN_KEY = 'auth_token';
 
 class ApiClient {
-  private token: string | null = null;
-
+  /**
+   * Obtém o ID Token do Firebase (auto-renova se expirado).
+   * Retorna null se o usuário não está autenticado.
+   */
   async getToken(): Promise<string | null> {
-    if (this.token) return this.token;
-    
     try {
-      this.token = await SecureStore.getItemAsync(TOKEN_KEY);
-      return this.token;
+      // Aguarda o Firebase carregar a sessão persistida antes de pegar o token.
+      // Sem isso há race condition: auth.currentUser é null na primeira renderização.
+      await auth.authStateReady();
+      return (await auth.currentUser?.getIdToken()) ?? null;
     } catch {
       return null;
     }
   }
 
-  async setToken(token: string): Promise<void> {
-    this.token = token;
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
-  }
-
+  /**
+   * Faz logout do Firebase.
+   * Chamado automaticamente em respostas 401.
+   */
   async clearToken(): Promise<void> {
-    this.token = null;
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
-  }
-
-  async setDevToken(userId: string, email: string): Promise<void> {
-    const devToken = `dev:${userId}:${email}`;
-    await this.setToken(devToken);
+    try {
+      await signOut(auth);
+    } catch {
+      // Ignora erros de logout
+    }
   }
 
   private async request<T>(
     method: string,
     url: string,
-    data?: Record<string, any>
+    data?: Record<string, unknown>
   ): Promise<T> {
     const token = await this.getToken();
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -69,7 +72,7 @@ class ApiClient {
       headers,
     };
 
-    if (data && (method === 'POST' || method === 'PUT')) {
+    if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
       config.body = JSON.stringify(data);
     }
 
@@ -90,12 +93,16 @@ class ApiClient {
     return this.request<T>('GET', url);
   }
 
-  async post<T>(url: string, data?: Record<string, any>): Promise<T> {
+  async post<T>(url: string, data?: Record<string, unknown>): Promise<T> {
     return this.request<T>('POST', url, data);
   }
 
-  async put<T>(url: string, data?: Record<string, any>): Promise<T> {
+  async put<T>(url: string, data?: Record<string, unknown>): Promise<T> {
     return this.request<T>('PUT', url, data);
+  }
+
+  async patch<T>(url: string, data?: Record<string, unknown>): Promise<T> {
+    return this.request<T>('PATCH', url, data);
   }
 
   async delete<T>(url: string): Promise<T> {

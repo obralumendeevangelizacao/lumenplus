@@ -1,24 +1,28 @@
-"""
+﻿"""
 Inbox Service
 =============
 Serviço para gerenciamento de avisos/inbox.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, update, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
-    InboxMessage, 
-    InboxRecipient, 
+    InboxMessage,
+    InboxRecipient,
     InboxMessageType,
-    User, 
+    User,
     UserProfile,
     UserPermission,
     ProfileCatalogItem,
+    OrgUnit,
+    OrgMembership,
+    OrgRoleCode,
+    MembershipStatus,
 )
 from app.schemas.inbox import InboxFilters
 
@@ -67,6 +71,72 @@ class InboxService:
         self.db.refresh(permission)
         return permission
     
+    def user_can_send(self, user_id: UUID) -> bool:
+        """Retorna True se o usuário pode enviar avisos (CAN_SEND_INBOX OU coordenador de alguma OrgUnit)."""
+        if self.user_has_permission(user_id, PERMISSION_SEND_INBOX):
+            return True
+        return self._coordinator_org_units(user_id) != []
+
+    def _coordinator_org_units(self, user_id: UUID) -> list[OrgUnit]:
+        """Retorna OrgUnits onde o usuário é coordenador ativo."""
+        rows = self.db.execute(
+            select(OrgUnit)
+            .join(OrgMembership, OrgMembership.org_unit_id == OrgUnit.id)
+            .where(
+                OrgMembership.user_id == user_id,
+                OrgMembership.role == OrgRoleCode.COORDINATOR,
+                OrgMembership.status == MembershipStatus.ACTIVE,
+                OrgUnit.is_active == True,
+            )
+            .order_by(OrgUnit.name)
+        ).scalars().all()
+        return list(rows)
+
+    def _get_org_subtree_ids(self, org_unit_id: UUID) -> list[UUID]:
+        """
+        Retorna o ID da OrgUnit raiz e todos os IDs dos descendentes (recursivo).
+        Usa recursive CTE para percorrer a árvore de org_units.
+        """
+        cte_sql = text("""
+            WITH RECURSIVE subtree AS (
+                SELECT id FROM org_units WHERE id = :root_id
+                UNION ALL
+                SELECT ou.id FROM org_units ou
+                INNER JOIN subtree st ON ou.parent_id = st.id
+            )
+            SELECT id FROM subtree
+        """)
+        rows = self.db.execute(cte_sql, {"root_id": str(org_unit_id)}).fetchall()
+        return [row[0] for row in rows]
+
+    def get_sendable_scopes(self, user_id: UUID) -> dict:
+        """
+        Retorna os escopos disponíveis para envio de aviso:
+        - can_send_to_all: True se tem CAN_SEND_INBOX
+        - scopes: lista de OrgUnits onde é coordenador (com contagem de membros)
+        """
+        can_send_to_all = self.user_has_permission(user_id, PERMISSION_SEND_INBOX)
+        coordinator_units = self._coordinator_org_units(user_id)
+
+        scopes = []
+        for unit in coordinator_units:
+            member_count = self.db.execute(
+                select(func.count())
+                .select_from(OrgMembership)
+                .where(
+                    OrgMembership.org_unit_id == unit.id,
+                    OrgMembership.status == MembershipStatus.ACTIVE,
+                )
+            ).scalar() or 0
+            scopes.append({
+                "id": unit.id,
+                "name": unit.name,
+                "type": unit.type.value,
+                "member_count": member_count,
+            })
+
+        return {"can_send_to_all": can_send_to_all, "scopes": scopes}
+
     def revoke_permission(self, user_id: UUID, permission_code: str) -> bool:
         """Remove uma permissão de um usuário."""
         result = self.db.execute(
@@ -96,7 +166,7 @@ class InboxService:
         Retorna mensagens do inbox do usuário.
         Returns: (messages, total, unread_count)
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Query base
         base_query = (
@@ -138,14 +208,19 @@ class InboxService:
             base_query.limit(limit).offset(offset)
         ).all()
         
+        # Bulk-fetch sender names em uma única query (evita N+1)
+        sender_ids = {msg.created_by_user_id for _, msg in results if msg.created_by_user_id}
+        sender_names: dict[UUID, str] = {}
+        if sender_ids:
+            name_rows = self.db.execute(
+                select(UserProfile.user_id, UserProfile.full_name)
+                .where(UserProfile.user_id.in_(sender_ids))
+            ).all()
+            sender_names = {r.user_id: r.full_name for r in name_rows if r.full_name}
+
         messages = []
         for recipient, message in results:
-            # Buscar nome do remetente
-            sender = self.db.execute(
-                select(UserProfile.full_name)
-                .where(UserProfile.user_id == message.created_by_user_id)
-            ).scalar_one_or_none()
-            
+            sender_name = sender_names.get(message.created_by_user_id) or "Lumen+"
             messages.append({
                 "id": str(recipient.id),
                 "message_id": str(message.id),
@@ -157,7 +232,7 @@ class InboxService:
                 "created_at": message.created_at,
                 "expires_at": message.expires_at,
                 "attachments": message.attachments,
-                "sender_name": sender or "Lumen+",
+                "sender_name": sender_name,
             })
         
         return messages, total, unread_count
@@ -168,7 +243,15 @@ class InboxService:
         return messages
     
     def mark_as_read(self, user_id: UUID, recipient_id: UUID) -> bool:
-        """Marca uma mensagem como lida."""
+        """
+        Marca uma mensagem como lida.
+
+        Retorna:
+          True  — recipient encontrado (marcado agora ou já estava lido)
+          False — recipient não existe ou não pertence ao usuário
+
+        Idempotente: chamar múltiplas vezes no mesmo recipient é seguro.
+        """
         recipient = self.db.execute(
             select(InboxRecipient)
             .where(
@@ -176,37 +259,46 @@ class InboxService:
                 InboxRecipient.user_id == user_id
             )
         ).scalar_one_or_none()
-        
-        if recipient and not recipient.read:
+
+        if not recipient:
+            return False  # genuinamente não encontrado
+
+        if not recipient.read:
             recipient.read = True
-            recipient.read_at = datetime.utcnow()
+            recipient.read_at = datetime.now(timezone.utc)
             self.db.commit()
-            return True
-        return False
+
+        return True  # encontrado — já lido ou recém-marcado
     
     def mark_all_as_read(self, user_id: UUID) -> int:
-        """Marca todas as mensagens como lidas. Retorna quantidade atualizada."""
-        now = datetime.utcnow()
-        
-        # Buscar IDs dos recipients não lidos
-        recipients = self.db.execute(
-            select(InboxRecipient)
+        """
+        Marca todas as mensagens não expiradas como lidas.
+        Usa UPDATE bulk em vez de loop para evitar N queries individuais.
+        Retorna a quantidade de registros atualizados.
+        """
+        now = datetime.now(timezone.utc)
+
+        # Subquery: IDs dos InboxRecipient elegíveis (não lidos, não expirados)
+        eligible_ids_subq = (
+            select(InboxRecipient.id)
             .join(InboxMessage, InboxRecipient.message_id == InboxMessage.id)
             .where(
                 InboxRecipient.user_id == user_id,
                 InboxRecipient.read == False,
-                InboxMessage.expires_at > now
+                InboxMessage.expires_at > now,
             )
-        ).scalars().all()
-        
-        count = 0
-        for recipient in recipients:
-            recipient.read = True
-            recipient.read_at = now
-            count += 1
-        
+        )
+
+        # UPDATE único — uma roundtrip ao banco independente do volume
+        result = self.db.execute(
+            update(InboxRecipient)
+            .where(InboxRecipient.id.in_(eligible_ids_subq))
+            .values(read=True, read_at=now)
+            .execution_options(synchronize_session="fetch")
+        )
+
         self.db.commit()
-        return count
+        return result.rowcount
     
     # === ENVIO DE AVISOS ===
     
@@ -239,78 +331,101 @@ class InboxService:
             .order_by(ProfileCatalogItem.sort_order)
         ).scalars().all()
         
-        # Estados (UF) únicos dos perfis
-        states = self.db.execute(
-            select(UserProfile.state)
-            .where(UserProfile.state.isnot(None))
-            .distinct()
-            .order_by(UserProfile.state)
-        ).scalars().all()
-        
-        # Cidades únicas dos perfis
+        # Estados brasileiros — lista fixa dos 27 estados + DF
+        all_br_states = [
+            "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO",
+            "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI",
+            "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+        ]
+
+        # Cidades únicas dos perfis já cadastrados (cresce conforme usuários se cadastram)
         cities = self.db.execute(
             select(UserProfile.city)
             .where(UserProfile.city.isnot(None))
             .distinct()
             .order_by(UserProfile.city)
         ).scalars().all()
-        
+
         return {
             "vocational_realities": [{"code": v.code, "label": v.label} for v in vocational],
             "life_states": [{"code": l.code, "label": l.label} for l in life_states],
             "marital_statuses": [{"code": m.code, "label": m.label} for m in marital],
-            "states": list(states),
+            "states": all_br_states,
             "cities": list(cities),
         }
     
-    def _get_recipient_user_ids(self, send_to_all: bool, filters: InboxFilters | None) -> list[UUID]:
-        """Retorna lista de user_ids baseado nos filtros."""
+    def _get_recipient_user_ids(
+        self,
+        send_to_all: bool,
+        filters: InboxFilters | None,
+        scope_org_unit_id: UUID | None = None,
+    ) -> list[UUID]:
+        """
+        Retorna lista de user_ids baseado nos filtros e escopo.
+        Prioridade de escopo:
+          1. scope_org_unit_id → membros ativos da OrgUnit e seus descendentes
+          2. send_to_all → todos os usuários ativos
+          3. filters (perfil) → subconjunto filtrado
+        Filtros de perfil são aplicados cumulativamente sobre o escopo.
+        """
+        conditions = [User.is_active == True]
         query = select(User.id).join(UserProfile, User.id == UserProfile.user_id, isouter=True)
-        
-        if send_to_all:
-            # Todos os usuários ativos
-            query = query.where(User.is_active == True)
-        elif filters:
-            conditions = [User.is_active == True]
-            
-            # Filtro por realidade vocacional
+
+        if scope_org_unit_id:
+            # Escopo restrito: membros ativos de toda a subárvore da OrgUnit
+            org_ids = self._get_org_subtree_ids(scope_org_unit_id)
+            member_subq = (
+                select(OrgMembership.user_id)
+                .where(
+                    OrgMembership.org_unit_id.in_([str(oid) for oid in org_ids]),
+                    OrgMembership.status == MembershipStatus.ACTIVE,
+                )
+            )
+            conditions.append(User.id.in_(member_subq))
+        elif send_to_all:
+            pass  # apenas User.is_active == True já está nos conditions
+        else:
+            # Sem escopo e sem send_to_all → necessita filtros de perfil
+            if not filters:
+                return []
+
+        # Filtros de perfil adicionais (aplicados sobre qualquer escopo)
+        if filters:
             if filters.vocational_reality_codes:
                 subq = select(ProfileCatalogItem.id).where(
                     ProfileCatalogItem.code.in_(filters.vocational_reality_codes)
                 )
                 conditions.append(UserProfile.vocational_reality_item_id.in_(subq))
-            
-            # Filtro por estado de vida
+
             if filters.life_state_codes:
                 subq = select(ProfileCatalogItem.id).where(
                     ProfileCatalogItem.code.in_(filters.life_state_codes)
                 )
                 conditions.append(UserProfile.life_state_item_id.in_(subq))
-            
-            # Filtro por estado civil
+
             if filters.marital_status_codes:
                 subq = select(ProfileCatalogItem.id).where(
                     ProfileCatalogItem.code.in_(filters.marital_status_codes)
                 )
                 conditions.append(UserProfile.marital_status_item_id.in_(subq))
-            
-            # Filtro por UF
+
             if filters.states:
                 conditions.append(UserProfile.state.in_(filters.states))
-            
-            # Filtro por cidade
+
             if filters.cities:
                 conditions.append(UserProfile.city.in_(filters.cities))
-            
-            query = query.where(and_(*conditions))
-        else:
-            return []
-        
+
+        query = query.where(and_(*conditions))
         return list(self.db.execute(query).scalars().all())
     
-    def preview_send(self, send_to_all: bool, filters: InboxFilters | None) -> int:
+    def preview_send(
+        self,
+        send_to_all: bool,
+        filters: InboxFilters | None,
+        scope_org_unit_id: UUID | None = None,
+    ) -> int:
         """Retorna quantos usuários receberão o aviso."""
-        user_ids = self._get_recipient_user_ids(send_to_all, filters)
+        user_ids = self._get_recipient_user_ids(send_to_all, filters, scope_org_unit_id)
         return len(user_ids)
     
     def send_message(
@@ -322,6 +437,7 @@ class InboxService:
         send_to_all: bool,
         filters: InboxFilters | None = None,
         attachments: list[dict] | None = None,
+        scope_org_unit_id: UUID | None = None,
     ) -> tuple[UUID, int]:
         """
         Envia uma mensagem para os destinatários.
@@ -339,15 +455,16 @@ class InboxService:
             message=message,
             type=msg_type,
             created_by_user_id=created_by_user_id,
-            expires_at=datetime.utcnow() + timedelta(days=INBOX_EXPIRATION_DAYS),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=INBOX_EXPIRATION_DAYS),
             attachments=attachments,
             filters=filters.model_dump() if filters else None,
+            target_org_unit_id=scope_org_unit_id,
         )
         self.db.add(inbox_message)
         self.db.flush()  # Para obter o ID
-        
+
         # Buscar destinatários
-        user_ids = self._get_recipient_user_ids(send_to_all, filters)
+        user_ids = self._get_recipient_user_ids(send_to_all, filters, scope_org_unit_id)
         
         # Criar recipients
         for user_id in user_ids:
@@ -407,7 +524,7 @@ class InboxService:
     
     def cleanup_expired_messages(self) -> int:
         """Remove mensagens expiradas. Retorna quantidade removida."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         expired = self.db.execute(
             select(InboxMessage)

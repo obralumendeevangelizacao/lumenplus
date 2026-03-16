@@ -2,9 +2,13 @@
  * Create Aviso Screen
  * ===================
  * Tela para criar e enviar avisos.
+ * Suporta:
+ *  - Envio global (CAN_SEND_INBOX) → "Todos os membros"
+ *  - Envio por escopo (coordenador) → seleciona setor/grupo
+ *  - Filtros de perfil adicionais (vocacional, civil, UF, cidade)
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,7 +22,8 @@ import {
 } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import api from '@/services/api';
+import { inboxService } from '@/services';
+import type { InboxPreviewResponse, InboxSendResponse, OrgScopeResponse, SendScopesResponse } from '@/types';
 
 const colors = {
   primary: '#1A859B',
@@ -44,45 +49,75 @@ type MessageType = 'info' | 'warning' | 'success' | 'urgent';
 
 const messageTypes: { type: MessageType; label: string; color: string; icon: string }[] = [
   { type: 'info', label: 'Informativo', color: colors.info, icon: 'information-circle' },
-  { type: 'warning', label: 'Atenção', color: colors.warning, icon: 'warning' },
-  { type: 'success', label: 'Confirmação', color: colors.success, icon: 'checkmark-circle' },
+  { type: 'warning', label: 'Atencao', color: colors.warning, icon: 'warning' },
+  { type: 'success', label: 'Confirmacao', color: colors.success, icon: 'checkmark-circle' },
   { type: 'urgent', label: 'Urgente', color: colors.error, icon: 'alert-circle' },
 ];
+
+type DestMode = 'all' | 'scope' | 'filter';
 
 export default function CreateAvisoScreen() {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<MessageType>('info');
-  const [sendToAll, setSendToAll] = useState(true);
-  
+
+  // Escopos disponíveis
+  const [scopesData, setScopesData] = useState<SendScopesResponse | null>(null);
+  const [loadingScopes, setLoadingScopes] = useState(true);
+
+  // Modo de destinatários
+  const [destMode, setDestMode] = useState<DestMode>('all');
+  const [selectedScope, setSelectedScope] = useState<OrgScopeResponse | null>(null);
+
+  // Filtros de perfil (modo 'filter')
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [loadingFilters, setLoadingFilters] = useState(false);
   const [selectedVocational, setSelectedVocational] = useState<string[]>([]);
   const [selectedLifeState, setSelectedLifeState] = useState<string[]>([]);
   const [selectedMarital, setSelectedMarital] = useState<string[]>([]);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  
+
   const [loading, setLoading] = useState(false);
-  const [loadingFilters, setLoadingFilters] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
+  const [showScopeModal, setShowScopeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFilterOptions();
+    loadScopes();
   }, []);
 
   useEffect(() => {
-    if (!sendToAll) updatePreview();
-  }, [sendToAll, selectedVocational, selectedLifeState, selectedMarital, selectedStates, selectedCities]);
+    if (destMode === 'filter' && !filterOptions) loadFilterOptions();
+    updatePreview();
+  }, [destMode, selectedScope, selectedVocational, selectedLifeState, selectedMarital, selectedStates, selectedCities]);
+
+  const loadScopes = async () => {
+    setLoadingScopes(true);
+    try {
+      const data = await inboxService.getSendableScopes();
+      setScopesData(data);
+      // Default: se não pode enviar para todos, mas tem escopos → modo scope
+      if (!data.can_send_to_all && data.scopes.length > 0) {
+        setDestMode('scope');
+        if (data.scopes.length === 1) setSelectedScope(data.scopes[0]);
+      }
+    } catch {
+      Alert.alert('Erro', 'Nao foi possivel carregar as permissoes de envio.');
+      router.back();
+    } finally {
+      setLoadingScopes(false);
+    }
+  };
 
   const loadFilterOptions = async () => {
     setLoadingFilters(true);
     try {
-      const response = await api.get('/inbox/send/filters');
-      setFilterOptions(response.data);
-    } catch (error) {
-      console.log('Erro ao carregar filtros:', error);
+      const response = await inboxService.getFilterOptions<FilterOptions>();
+      setFilterOptions(response);
+    } catch {
+      // silencioso — filtros são opcionais
     } finally {
       setLoadingFilters(false);
     }
@@ -91,13 +126,15 @@ export default function CreateAvisoScreen() {
   const updatePreview = async () => {
     try {
       const filters = buildFilters();
-      const response = await api.post('/inbox/send/preview', {
-        send_to_all: sendToAll,
-        filters: sendToAll ? null : filters,
-      });
-      setPreviewCount(response.data.recipient_count);
-    } catch (error) {
-      console.log('Erro ao atualizar preview:', error);
+      const payload: any = {
+        send_to_all: destMode === 'all',
+        scope_org_unit_id: destMode === 'scope' ? selectedScope?.id ?? null : null,
+        filters: destMode === 'filter' ? filters : null,
+      };
+      const response = await inboxService.previewSend(payload);
+      setPreviewCount(response.recipient_count);
+    } catch {
+      setPreviewCount(null);
     }
   };
 
@@ -112,13 +149,20 @@ export default function CreateAvisoScreen() {
   };
 
   const handleSend = async () => {
-    if (!title.trim()) return Alert.alert('Erro', 'Digite um título para o aviso');
+    if (!title.trim()) return Alert.alert('Erro', 'Digite um titulo para o aviso');
     if (!message.trim()) return Alert.alert('Erro', 'Digite o texto do aviso');
-    if (!sendToAll && !buildFilters()) return Alert.alert('Erro', 'Selecione pelo menos um filtro');
+    if (destMode === 'scope' && !selectedScope) return Alert.alert('Erro', 'Selecione um setor ou grupo');
+    if (destMode === 'filter' && !buildFilters()) return Alert.alert('Erro', 'Selecione pelo menos um filtro');
+
+    const destLabel = destMode === 'all'
+      ? 'todos os membros'
+      : destMode === 'scope'
+        ? selectedScope?.name ?? ''
+        : `${previewCount ?? '?'} membro(s) filtrado(s)`;
 
     Alert.alert(
       'Confirmar envio',
-      `Enviar aviso para ${sendToAll ? 'todos os membros' : `${previewCount} membro(s)`}?`,
+      `Enviar aviso para ${destLabel}?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Enviar', onPress: sendAviso },
@@ -129,18 +173,21 @@ export default function CreateAvisoScreen() {
   const sendAviso = async () => {
     setLoading(true);
     try {
-      const response = await api.post('/inbox/send', {
+      const filters = destMode === 'filter' ? buildFilters() : null;
+      const response = await inboxService.send({
         title: title.trim(),
         message: message.trim(),
         type: messageType,
-        send_to_all: sendToAll,
-        filters: sendToAll ? null : buildFilters(),
+        send_to_all: destMode === 'all',
+        scope_org_unit_id: destMode === 'scope' ? (selectedScope?.id ?? null) : null,
+        filters,
       });
-      Alert.alert('Aviso Enviado!', `Enviado para ${response.data.recipient_count} membro(s).`,
+      Alert.alert('Aviso Enviado!', `Enviado para ${response.recipient_count} membro(s).`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
-      Alert.alert('Erro', error.response?.data?.detail || 'Não foi possível enviar o aviso');
+      const detail = error.response?.data?.detail?.message || error.response?.data?.detail || 'Nao foi possivel enviar o aviso';
+      Alert.alert('Erro', detail);
     } finally {
       setLoading(false);
     }
@@ -173,12 +220,24 @@ export default function CreateAvisoScreen() {
   };
 
   const filterData = getFilterData();
+  const canSendToAll = scopesData?.can_send_to_all ?? false;
+  const hasScopes = (scopesData?.scopes.length ?? 0) > 0;
+
+  if (loadingScopes) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.admin} />
+      </View>
+    );
+  }
 
   return (
     <>
       <Stack.Screen options={{ title: 'Criar Aviso' }} />
-      
+
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+
+        {/* Tipo */}
         <Text style={styles.label}>Tipo do Aviso</Text>
         <View style={styles.typeContainer}>
           {messageTypes.map((mt) => (
@@ -193,27 +252,112 @@ export default function CreateAvisoScreen() {
           ))}
         </View>
 
-        <Text style={styles.label}>Título</Text>
-        <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Ex: Reunião de Formação" maxLength={200} />
+        {/* Titulo */}
+        <Text style={styles.label}>Titulo</Text>
+        <TextInput
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Ex: Reuniao de Formacao"
+          maxLength={200}
+        />
 
+        {/* Mensagem */}
         <Text style={styles.label}>Texto do Aviso</Text>
-        <TextInput style={[styles.input, styles.textArea]} value={message} onChangeText={setMessage} placeholder="Escreva o conteúdo..." multiline numberOfLines={6} textAlignVertical="top" maxLength={5000} />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={message}
+          onChangeText={setMessage}
+          placeholder="Escreva o conteudo..."
+          multiline
+          numberOfLines={6}
+          textAlignVertical="top"
+          maxLength={5000}
+        />
 
-        <Text style={styles.label}>Destinatários</Text>
+        {/* Destinatarios */}
+        <Text style={styles.label}>Destinatarios</Text>
         <View style={styles.destContainer}>
-          <TouchableOpacity style={[styles.destOption, sendToAll && styles.destOptionActive]} onPress={() => setSendToAll(true)}>
-            <Ionicons name={sendToAll ? "radio-button-on" : "radio-button-off"} size={20} color={sendToAll ? colors.admin : colors.gray} />
-            <Text style={[styles.destText, sendToAll && styles.destTextActive]}>Todos os membros</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.destOption, !sendToAll && styles.destOptionActive]} onPress={() => setSendToAll(false)}>
-            <Ionicons name={!sendToAll ? "radio-button-on" : "radio-button-off"} size={20} color={!sendToAll ? colors.admin : colors.gray} />
-            <Text style={[styles.destText, !sendToAll && styles.destTextActive]}>Segmentado</Text>
-          </TouchableOpacity>
+
+          {/* Todos os membros (apenas CAN_SEND_INBOX) */}
+          {canSendToAll && (
+            <TouchableOpacity
+              style={[styles.destOption, destMode === 'all' && styles.destOptionActive]}
+              onPress={() => setDestMode('all')}
+            >
+              <Ionicons
+                name={destMode === 'all' ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={destMode === 'all' ? colors.admin : colors.gray}
+              />
+              <View style={styles.destTextBlock}>
+                <Text style={[styles.destText, destMode === 'all' && styles.destTextActive]}>Todos os membros</Text>
+                <Text style={styles.destSubtext}>Envia para toda a comunidade</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Setor / Grupo (coordenadores) */}
+          {hasScopes && (
+            <TouchableOpacity
+              style={[styles.destOption, destMode === 'scope' && styles.destOptionActive]}
+              onPress={() => setDestMode('scope')}
+            >
+              <Ionicons
+                name={destMode === 'scope' ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={destMode === 'scope' ? colors.admin : colors.gray}
+              />
+              <View style={styles.destTextBlock}>
+                <Text style={[styles.destText, destMode === 'scope' && styles.destTextActive]}>
+                  {selectedScope ? selectedScope.name : 'Setor ou Grupo'}
+                </Text>
+                <Text style={styles.destSubtext}>
+                  {selectedScope
+                    ? `${selectedScope.member_count} membro(s)`
+                    : 'Selecione um setor ou grupo'}
+                </Text>
+              </View>
+              {destMode === 'scope' && scopesData && scopesData.scopes.length > 1 && (
+                <TouchableOpacity onPress={() => setShowScopeModal(true)} style={styles.changeScopeBtn}>
+                  <Text style={styles.changeScopeText}>Alterar</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Por filtros de perfil (apenas CAN_SEND_INBOX) */}
+          {canSendToAll && (
+            <TouchableOpacity
+              style={[styles.destOption, destMode === 'filter' && styles.destOptionActive]}
+              onPress={() => setDestMode('filter')}
+            >
+              <Ionicons
+                name={destMode === 'filter' ? 'radio-button-on' : 'radio-button-off'}
+                size={20}
+                color={destMode === 'filter' ? colors.admin : colors.gray}
+              />
+              <View style={styles.destTextBlock}>
+                <Text style={[styles.destText, destMode === 'filter' && styles.destTextActive]}>Segmentado por perfil</Text>
+                <Text style={styles.destSubtext}>Filtra por vocacao, estado civil, UF...</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {!sendToAll && (
+        {/* Seletor de escopo inline quando só há 1 escopo */}
+        {destMode === 'scope' && !selectedScope && hasScopes && (
+          <TouchableOpacity style={styles.pickScopeBtn} onPress={() => setShowScopeModal(true)}>
+            <Ionicons name="people" size={20} color={colors.admin} />
+            <Text style={styles.pickScopeText}>Escolher setor/grupo</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.admin} />
+          </TouchableOpacity>
+        )}
+
+        {/* Filtros de perfil (modo filter) */}
+        {destMode === 'filter' && (
           <View style={styles.filtersContainer}>
-            <Text style={styles.filtersTitle}>Filtros de Segmentação</Text>
+            <Text style={styles.filtersTitle}>Filtros de Segmentacao</Text>
             {loadingFilters ? <ActivityIndicator color={colors.admin} /> : (
               <>
                 <FilterBtn label="Realidade Vocacional" count={selectedVocational.length} onPress={() => openFilter('vocational')} />
@@ -223,16 +367,23 @@ export default function CreateAvisoScreen() {
                 <FilterBtn label="Cidade" count={selectedCities.length} onPress={() => openFilter('cities')} />
               </>
             )}
-            {previewCount !== null && (
-              <View style={styles.previewBox}>
-                <Ionicons name="people" size={20} color={colors.admin} />
-                <Text style={styles.previewText}>{previewCount} membro(s) receberão este aviso</Text>
-              </View>
-            )}
           </View>
         )}
 
-        <TouchableOpacity style={[styles.sendButton, loading && styles.sendButtonDisabled]} onPress={handleSend} disabled={loading}>
+        {/* Preview de destinatarios */}
+        {previewCount !== null && (
+          <View style={styles.previewBox}>
+            <Ionicons name="people" size={20} color={colors.admin} />
+            <Text style={styles.previewText}>{previewCount} membro(s) receberao este aviso</Text>
+          </View>
+        )}
+
+        {/* Botao de envio */}
+        <TouchableOpacity
+          style={[styles.sendButton, loading && styles.sendButtonDisabled]}
+          onPress={handleSend}
+          disabled={loading}
+        >
           {loading ? <ActivityIndicator color={colors.white} /> : (
             <>
               <Ionicons name="send" size={20} color={colors.white} />
@@ -242,16 +393,57 @@ export default function CreateAvisoScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Modal de seleção de escopo */}
+      <Modal visible={showScopeModal} animationType="slide" transparent onRequestClose={() => setShowScopeModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selecionar Setor/Grupo</Text>
+              <TouchableOpacity onPress={() => setShowScopeModal(false)}>
+                <Ionicons name="close" size={24} color={colors.gray} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {(scopesData?.scopes ?? []).map((scope) => (
+                <TouchableOpacity
+                  key={scope.id}
+                  style={[styles.scopeOption, selectedScope?.id === scope.id && styles.scopeOptionSelected]}
+                  onPress={() => { setSelectedScope(scope); setDestMode('scope'); setShowScopeModal(false); }}
+                >
+                  <View style={styles.scopeOptionLeft}>
+                    <Text style={styles.scopeOptionName}>{scope.name}</Text>
+                    <Text style={styles.scopeOptionMeta}>{scope.type} • {scope.member_count} membro(s)</Text>
+                  </View>
+                  {selectedScope?.id === scope.id && (
+                    <Ionicons name="checkmark-circle" size={22} color={colors.admin} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.modalDoneButton} onPress={() => setShowScopeModal(false)}>
+              <Text style={styles.modalDoneText}>Concluir</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de seleção de filtros de perfil */}
       <Modal visible={showFilterModal} animationType="slide" transparent onRequestClose={() => setShowFilterModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{filterData.title}</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}><Ionicons name="close" size={24} color={colors.gray} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
+                <Ionicons name="close" size={24} color={colors.gray} />
+              </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
               {filterData.options.map((opt) => (
-                <TouchableOpacity key={opt.code} style={styles.filterOption} onPress={() => toggleSelection(opt.code, filterData.selected, filterData.setSelected)}>
+                <TouchableOpacity
+                  key={opt.code}
+                  style={styles.filterOption}
+                  onPress={() => toggleSelection(opt.code, filterData.selected, filterData.setSelected)}
+                >
                   <Text style={styles.filterOptionText}>{opt.label}</Text>
                   <View style={[styles.checkbox, filterData.selected.includes(opt.code) && styles.checkboxChecked]}>
                     {filterData.selected.includes(opt.code) && <Ionicons name="checkmark" size={16} color={colors.white} />}
@@ -284,6 +476,7 @@ function FilterBtn({ label, count, onPress }: { label: string; count: number; on
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.lightGray },
   content: { padding: 16, paddingBottom: 40 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.lightGray },
   label: { fontSize: 14, fontWeight: '600', color: '#171717', marginBottom: 8, marginTop: 16 },
   input: { backgroundColor: colors.white, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: '#e5e5e5' },
   textArea: { minHeight: 120 },
@@ -293,8 +486,14 @@ const styles = StyleSheet.create({
   destContainer: { backgroundColor: colors.white, borderRadius: 12, overflow: 'hidden' },
   destOption: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   destOptionActive: { backgroundColor: `${colors.admin}08` },
+  destTextBlock: { flex: 1 },
   destText: { fontSize: 15, color: colors.gray },
   destTextActive: { color: '#171717', fontWeight: '500' },
+  destSubtext: { fontSize: 12, color: colors.gray, marginTop: 2 },
+  changeScopeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: `${colors.admin}15` },
+  changeScopeText: { fontSize: 12, color: colors.admin, fontWeight: '600' },
+  pickScopeBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: `${colors.admin}10`, borderRadius: 12, padding: 14, marginTop: 8 },
+  pickScopeText: { flex: 1, fontSize: 15, color: colors.admin, fontWeight: '500' },
   filtersContainer: { backgroundColor: colors.white, borderRadius: 12, padding: 16, marginTop: 12 },
   filtersTitle: { fontSize: 14, fontWeight: '600', color: '#171717', marginBottom: 12 },
   filterButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
@@ -307,11 +506,17 @@ const styles = StyleSheet.create({
   sendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.admin, borderRadius: 12, padding: 16, marginTop: 24 },
   sendButtonDisabled: { opacity: 0.6 },
   sendButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  // Modais
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
   modalTitle: { fontSize: 18, fontWeight: '600', color: '#171717' },
   modalScroll: { padding: 16 },
+  scopeOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  scopeOptionSelected: { backgroundColor: `${colors.admin}08` },
+  scopeOptionLeft: { flex: 1 },
+  scopeOptionName: { fontSize: 15, fontWeight: '500', color: '#171717' },
+  scopeOptionMeta: { fontSize: 12, color: colors.gray, marginTop: 2 },
   filterOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   filterOptionText: { fontSize: 15, color: '#171717' },
   checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center' },

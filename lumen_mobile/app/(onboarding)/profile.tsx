@@ -29,8 +29,9 @@ import {
   Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import api from '@/services/api';
 
 const colors = {
@@ -49,6 +50,13 @@ interface CatalogItem {
   id: string;
   code: string;
   label: string;
+  sort_order?: number;
+}
+
+interface CatalogResponse {
+  code: string;
+  name: string;
+  items: CatalogItem[];
 }
 
 interface Ministry {
@@ -56,7 +64,29 @@ interface Ministry {
   name: string;
 }
 
+interface ExistingProfile {
+  full_name?: string;
+  birth_date?: string;
+  cpf?: string;
+  rg?: string;
+  phone_e164?: string;
+  city?: string;
+  state?: string;
+  life_state_item_id?: string;
+  marital_status_item_id?: string;
+  vocational_reality_item_id?: string;
+  consecration_year?: number;
+  has_vocational_accompaniment?: boolean;
+  vocational_accompanist_name?: string;
+  interested_in_ministry?: boolean;
+  interested_ministry_id?: string;
+  ministry_interest_notes?: string;
+}
+
 export default function ProfileScreen() {
+  const params = useLocalSearchParams<{ fullName?: string; phone?: string }>();
+  // Telefone verificado = veio do fluxo verify-phone via params
+  const phoneVerified = !!params.phone;
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -90,8 +120,10 @@ export default function ProfileScreen() {
   const [selectedMinistry, setSelectedMinistry] = useState('');
   const [ministryNotes, setMinistryNotes] = useState('');
 
-  // Verifica se é Consagrado Filho da Luz
-  const isConsagrado = vocationalReality === 'CONSAGRADO_FILHO_DA_LUZ';
+  // Verifica se é Consagrado Filho da Luz (vocationalReality guarda o UUID do item)
+  const isConsagrado =
+    vocationalRealities.find((i) => i.id === vocationalReality)?.code ===
+    'CONSAGRADO_FILHO_DA_LUZ';
 
   const states = [
     'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
@@ -104,16 +136,55 @@ export default function ProfileScreen() {
 
   const loadData = async () => {
     try {
-      // Carrega catálogos do backend
-      const response = await api.get<{
-        life_states: CatalogItem[];
-        marital_statuses: CatalogItem[];
-        vocational_realities: CatalogItem[];
-      }>('/profile/catalogs');
-      
-      setLifeStates(response.life_states || []);
-      setMaritalStatuses(response.marital_statuses || []);
-      setVocationalRealities(response.vocational_realities || []);
+      // Carrega catálogos e perfil existente em paralelo
+      const [catalogs, existingProfile] = await Promise.all([
+        api.get<CatalogResponse[]>('/profile/catalogs'),
+        api.get<ExistingProfile>('/profile').catch(() => null),
+      ]);
+
+      const find = (code: string): CatalogItem[] =>
+        catalogs.find((c) => c.code === code)?.items ?? [];
+
+      setLifeStates(find('LIFE_STATE'));
+      setMaritalStatuses(find('MARITAL_STATUS'));
+      setVocationalRealities(find('VOCATIONAL_REALITY'));
+
+      // Pré-popula campos com dados já existentes no backend
+      if (existingProfile) {
+        if (existingProfile.full_name) setFullName(existingProfile.full_name);
+        if (existingProfile.birth_date) {
+          // Converte YYYY-MM-DD para DD/MM/YYYY
+          const parts = existingProfile.birth_date.split('-');
+          if (parts.length === 3) setBirthDate(`${parts[2]}/${parts[1]}/${parts[0]}`);
+        }
+        if (existingProfile.cpf) setCpf(formatCPF(existingProfile.cpf));
+        if (existingProfile.rg) setRg(existingProfile.rg);
+        if (existingProfile.phone_e164) {
+          // Converte E164 (+5511999999999) para formato BR
+          const digits = existingProfile.phone_e164.replace(/\D/g, '').slice(2); // remove +55
+          setPhone(formatPhone(digits));
+        }
+        if (existingProfile.city) setCity(existingProfile.city);
+        if (existingProfile.state) setState(existingProfile.state);
+        if (existingProfile.life_state_item_id) setLifeState(existingProfile.life_state_item_id);
+        if (existingProfile.marital_status_item_id) setMaritalStatus(existingProfile.marital_status_item_id);
+        if (existingProfile.vocational_reality_item_id) setVocationalReality(existingProfile.vocational_reality_item_id);
+        if (existingProfile.consecration_year) setConsecrationYear(String(existingProfile.consecration_year));
+        if (existingProfile.has_vocational_accompaniment != null) setHasAccompaniment(existingProfile.has_vocational_accompaniment);
+        if (existingProfile.vocational_accompanist_name) setAccompanistName(existingProfile.vocational_accompanist_name);
+        if (existingProfile.interested_in_ministry != null) setInterestedInMinistry(existingProfile.interested_in_ministry);
+        if (existingProfile.interested_ministry_id) setSelectedMinistry(existingProfile.interested_ministry_id);
+        if (existingProfile.ministry_interest_notes) setMinistryNotes(existingProfile.ministry_interest_notes);
+      }
+
+      // Parâmetros de rota têm prioridade sobre dados do backend
+      // (são os dados que o usuário acabou de digitar no cadastro)
+      if (params.fullName) setFullName(params.fullName);
+      if (params.phone) {
+        // phone vem em formato E164 (+5511999999999)
+        const digits = params.phone.replace(/\D/g, '').slice(2); // remove 55
+        if (digits) setPhone(formatPhone(digits));
+      }
 
       // Carrega ministérios disponíveis
       try {
@@ -277,9 +348,10 @@ export default function ProfileScreen() {
         phone_e164: phoneE164,
         city: city.trim(),
         state,
-        life_state: lifeState,
-        marital_status: maritalStatus,
-        vocational_reality: vocationalReality,
+        // Backend espera UUIDs dos itens de catálogo
+        life_state_item_id: lifeState,
+        marital_status_item_id: maritalStatus,
+        vocational_reality_item_id: vocationalReality,
         consecration_year: isConsagrado ? parseInt(consecrationYear) : null,
         has_vocational_accompaniment: hasAccompaniment,
         vocational_accompanist_name: hasAccompaniment ? accompanistName.trim() : null,
@@ -415,16 +487,36 @@ export default function ProfileScreen() {
           {errors.rg && <Text style={styles.errorText}>{errors.rg}</Text>}
 
           <Text style={styles.label}>Telefone (WhatsApp) *</Text>
-          <TextInput
-            style={[styles.input, errors.phone && styles.inputError]}
-            placeholder="(00) 00000-0000"
-            value={phone}
-            onChangeText={(v) => setPhone(formatPhone(v))}
-            keyboardType="phone-pad"
-            maxLength={15}
-            placeholderTextColor={colors.gray}
-          />
-          {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+          {phoneVerified ? (
+            <View style={styles.lockedField}>
+              <TextInput
+                style={[styles.input, styles.inputLocked]}
+                value={phone}
+                editable={false}
+                placeholderTextColor={colors.gray}
+              />
+              <View style={styles.lockedBadge}>
+                <Ionicons name="lock-closed" size={14} color={colors.success} />
+                <Text style={styles.lockedText}>Verificado</Text>
+              </View>
+            </View>
+          ) : (
+            <TextInput
+              style={[styles.input, errors.phone && styles.inputError]}
+              placeholder="(00) 00000-0000"
+              value={phone}
+              onChangeText={(v) => setPhone(formatPhone(v))}
+              keyboardType="phone-pad"
+              maxLength={15}
+              placeholderTextColor={colors.gray}
+            />
+          )}
+          {!phoneVerified && errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+          {phoneVerified && (
+            <Text style={styles.lockedHint}>
+              Para alterar o telefone é necessário uma nova verificação.
+            </Text>
+          )}
         </View>
 
         {/* ============================================ */}
@@ -466,7 +558,7 @@ export default function ProfileScreen() {
             <Picker selectedValue={lifeState} onValueChange={setLifeState}>
               <Picker.Item label="Selecione..." value="" />
               {lifeStates.map((item) => (
-                <Picker.Item key={item.code} label={item.label} value={item.code} />
+                <Picker.Item key={item.id} label={item.label} value={item.id} />
               ))}
             </Picker>
           </View>
@@ -477,7 +569,7 @@ export default function ProfileScreen() {
             <Picker selectedValue={maritalStatus} onValueChange={setMaritalStatus}>
               <Picker.Item label="Selecione..." value="" />
               {maritalStatuses.map((item) => (
-                <Picker.Item key={item.code} label={item.label} value={item.code} />
+                <Picker.Item key={item.id} label={item.label} value={item.id} />
               ))}
             </Picker>
           </View>
@@ -488,7 +580,7 @@ export default function ProfileScreen() {
             <Picker selectedValue={vocationalReality} onValueChange={setVocationalReality}>
               <Picker.Item label="Selecione..." value="" />
               {vocationalRealities.map((item) => (
-                <Picker.Item key={item.code} label={item.label} value={item.code} />
+                <Picker.Item key={item.id} label={item.label} value={item.id} />
               ))}
             </Picker>
           </View>
@@ -759,5 +851,35 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 40,
+  },
+  lockedField: {
+    position: 'relative',
+  },
+  inputLocked: {
+    backgroundColor: '#f0fdf4',
+    borderColor: colors.success,
+    borderWidth: 1,
+    color: colors.gray,
+  },
+  lockedBadge: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  lockedText: {
+    fontSize: 12,
+    color: colors.success,
+    fontWeight: '600',
+  },
+  lockedHint: {
+    fontSize: 12,
+    color: colors.gray,
+    marginTop: 4,
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
 });

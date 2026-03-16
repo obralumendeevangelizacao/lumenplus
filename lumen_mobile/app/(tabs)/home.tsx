@@ -7,8 +7,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
+import { auth } from '@/config/firebase';
 import api from '@/services/api';
 
 const colors = {
@@ -43,29 +43,38 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      // Carregar nome do usuário
-      const token = await SecureStore.getItemAsync('auth_token');
-      if (token) {
-        const parts = token.split(':');
-        if (parts.length >= 2) {
-          const name = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-          setUserName(name);
+      // Aguarda Firebase restaurar a sessão antes de qualquer chamada autenticada
+      await auth.authStateReady();
+
+      // Carregar primeiro nome: tenta perfil do backend, fallback para Firebase displayName
+      try {
+        const profile = await api.get<{ full_name?: string }>('/profile');
+        if (profile.full_name) {
+          const firstName = profile.full_name.trim().split(' ')[0];
+          setUserName(firstName);
+          return;
         }
+      } catch {
+        // Perfil ainda incompleto — tenta Firebase
+      }
+      const firebaseName = auth.currentUser?.displayName;
+      if (firebaseName) {
+        setUserName(firebaseName.trim().split(' ')[0]);
       }
 
       // Verificar permissões de admin
       try {
-        const permResponse = await api.get('/inbox/permissions');
-        setHasAdminAccess(permResponse.data.has_admin_access || false);
-      } catch (error) {
+        const permResponse = await api.get<{ has_admin_access: boolean }>('/inbox/permissions');
+        setHasAdminAccess(permResponse.has_admin_access || false);
+      } catch {
         setHasAdminAccess(false);
       }
 
       // Carregar avisos não lidos
       try {
-        const response = await api.get('/inbox/unread');
-        setAvisosNaoLidos(response.data || []);
-      } catch (error) {
+        const response = await api.get<Aviso[]>('/inbox/unread');
+        setAvisosNaoLidos(response || []);
+      } catch {
         setAvisosNaoLidos([]);
       }
     } catch (error) {
@@ -82,7 +91,8 @@ export default function HomeScreen() {
   }, []);
 
   const handleLogout = async () => {
-    await SecureStore.deleteItemAsync('auth_token');
+    const { signOut } = await import('firebase/auth');
+    await signOut(auth);
     router.replace('/(auth)/login');
   };
 

@@ -16,14 +16,19 @@ def create_audit_log(
     user_agent: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> AuditLog:
+    # AuditLog não tem colunas ip/user_agent — mesclamos em extra_data
+    extra: dict[str, Any] = dict(metadata) if metadata else {}
+    if ip:
+        extra["ip"] = ip
+    if user_agent:
+        extra["user_agent"] = user_agent
+
     log_entry = AuditLog(
         actor_user_id=actor_user_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
-        ip=ip,
-        user_agent=user_agent,
-        extra_data=metadata,  # Mapeia o parâmetro 'metadata' para a coluna 'extra_data'
+        extra_data=extra or None,
     )
     db.add(log_entry)
     return log_entry
