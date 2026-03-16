@@ -23,6 +23,8 @@ import {
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { orgService, orgAdminService } from '@/services';
+import api from '@/services/api';
+import type { Membership } from '@/types';
 
 const colors = {
   admin: '#7c3aed',
@@ -99,6 +101,36 @@ interface InviteModalState {
   orgUnitName: string;
 }
 
+interface EditModalState {
+  visible: boolean;
+  unit: OrgUnitNode | null;
+}
+
+// =============================================================================
+// Helpers de permissão client-side
+// =============================================================================
+
+/** Verifica se `unit` é descendente de `ancestorId` percorrendo a árvore. */
+function isDescendantOf(unit: OrgUnitNode, ancestorId: string, root: OrgUnitNode | null): boolean {
+  if (!root || !unit.parent_id) return false;
+  function findParent(node: OrgUnitNode, targetId: string): OrgUnitNode | null {
+    if (node.id === targetId) return node;
+    for (const child of node.children) {
+      const found = findParent(child, targetId);
+      if (found) return found;
+    }
+    return null;
+  }
+  // Sobe a árvore a partir do parent_id de `unit`
+  let currentId: string | null | undefined = unit.parent_id;
+  while (currentId) {
+    if (currentId === ancestorId) return true;
+    const parent = findParent(root, currentId);
+    currentId = parent?.parent_id;
+  }
+  return false;
+}
+
 // =============================================================================
 // Componente principal
 // =============================================================================
@@ -107,6 +139,10 @@ export default function EntitiesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Permissões de edição
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
+  const [myCoordMemberships, setMyCoordMemberships] = useState<Membership[]>([]);
 
   const [createModal, setCreateModal] = useState<CreateModalState>({
     visible: false,
@@ -122,6 +158,11 @@ export default function EntitiesScreen() {
     orgUnitName: '',
   });
 
+  const [editModal, setEditModal] = useState<EditModalState>({
+    visible: false,
+    unit: null,
+  });
+
   const loadTree = useCallback(async () => {
     try {
       setError(null);
@@ -133,16 +174,45 @@ export default function EntitiesScreen() {
     }
   }, []);
 
+  const loadPermissions = useCallback(async () => {
+    try {
+      const [perms, memberships] = await Promise.all([
+        api.get<{ has_admin_access: boolean }>('/inbox/permissions'),
+        orgService.getMyMemberships(),
+      ]);
+      setIsGlobalAdmin(perms.has_admin_access || false);
+      setMyCoordMemberships(
+        (memberships as Membership[]).filter((m) => m.role === 'COORDINATOR' && m.status === 'ACTIVE')
+      );
+    } catch {
+      // silencioso — sem permissões de edição por padrão
+    }
+  }, []);
+
   useEffect(() => {
     setLoading(true);
-    loadTree().finally(() => setLoading(false));
-  }, [loadTree]);
+    Promise.all([loadTree(), loadPermissions()]).finally(() => setLoading(false));
+  }, [loadTree, loadPermissions]);
+
+  /** Verifica se o usuário atual pode editar a unidade. */
+  const canEditUnit = useCallback((unit: OrgUnitNode): boolean => {
+    if (isGlobalAdmin) return true;
+    for (const m of myCoordMemberships) {
+      if (m.org_unit_type === 'CONSELHO_GERAL') return true;
+      if (m.org_unit_type === 'CONSELHO_EXECUTIVO' &&
+          ['SETOR', 'MINISTERIO', 'GRUPO'].includes(unit.type)) return true;
+      if (m.org_unit_type === 'SETOR' &&
+          ['MINISTERIO', 'GRUPO'].includes(unit.type) &&
+          isDescendantOf(unit, m.org_unit_id, tree)) return true;
+    }
+    return false;
+  }, [isGlobalAdmin, myCoordMemberships, tree]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadTree();
+    await Promise.all([loadTree(), loadPermissions()]);
     setRefreshing(false);
-  }, [loadTree]);
+  }, [loadTree, loadPermissions]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // Renderização da árvore
@@ -173,6 +243,17 @@ export default function EntitiesScreen() {
             <Ionicons name="person-add-outline" size={14} color={colors.primary} />
             <Text style={[styles.actionBtnText, { color: colors.primary }]}>Convidar</Text>
           </TouchableOpacity>
+
+          {/* Editar */}
+          {canEditUnit(unit) && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => setEditModal({ visible: true, unit })}
+            >
+              <Ionicons name="pencil-outline" size={14} color={colors.admin} />
+              <Text style={[styles.actionBtnText, { color: colors.admin }]}>Editar</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Criar filho */}
           {canHaveChildren && (
@@ -274,6 +355,16 @@ export default function EntitiesScreen() {
       <InviteModal
         state={inviteModal}
         onClose={() => setInviteModal((s) => ({ ...s, visible: false }))}
+      />
+
+      {/* Modal de edição */}
+      <EditEntityModal
+        state={editModal}
+        onClose={() => setEditModal({ visible: false, unit: null })}
+        onSuccess={() => {
+          setEditModal({ visible: false, unit: null });
+          loadTree();
+        }}
       />
     </>
   );
@@ -614,6 +705,108 @@ function InviteModal({
             </TouchableOpacity>
           </View>
         )}
+      </View>
+    </Modal>
+  );
+}
+
+// =============================================================================
+// Modal de Edição de Unidade
+// =============================================================================
+function EditEntityModal({
+  state,
+  onClose,
+  onSuccess,
+}: {
+  state: EditModalState;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (state.visible && state.unit) {
+      setName(state.unit.name);
+      setDescription(state.unit.description ?? '');
+      setError(null);
+    }
+  }, [state.visible, state.unit]);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      setError('O nome não pode ficar vazio.');
+      return;
+    }
+    if (!state.unit) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await orgAdminService.updateUnit(state.unit.id, {
+        name: name.trim(),
+        description: description.trim() || undefined,
+      });
+      onSuccess();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail?.message ?? 'Erro ao salvar';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={state.visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Editar: {state.unit?.name}</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.modalBody}>
+          <Text style={styles.fieldLabel}>Nome *</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={(t) => { setName(t); setError(null); }}
+            placeholder="Nome da entidade"
+            placeholderTextColor={colors.gray}
+            maxLength={80}
+          />
+
+          <Text style={styles.fieldLabel}>Descrição (opcional)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Breve descrição..."
+            placeholderTextColor={colors.gray}
+            multiline
+            numberOfLines={3}
+            maxLength={300}
+          />
+
+          {error && (
+            <Text style={{ color: colors.danger, fontSize: 13, marginTop: 8 }}>{error}</Text>
+          )}
+        </ScrollView>
+
+        <View style={styles.modalFooter}>
+          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={loading}>
+            <Text style={styles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.submitBtn} onPress={handleSave} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={styles.submitBtnText}>Salvar</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
   );

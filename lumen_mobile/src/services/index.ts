@@ -236,6 +236,10 @@ export const orgAdminService = {
   /** Remove membro de uma unidade. */
   removeMember: (orgUnitId: string, memberUserId: string) =>
     api.delete(`/org/units/${orgUnitId}/members/${memberUserId}`),
+
+  /** Edita nome e/ou descrição de uma unidade. */
+  updateUnit: (unitId: string, data: { name?: string; description?: string }) =>
+    api.patch(`/org/units/${unitId}`, data as Record<string, unknown>),
 };
 
 // =============================================================================
@@ -253,6 +257,10 @@ export const adminUserService = {
       `/admin/users${qs ? `?${qs}` : ''}`
     );
   },
+
+  /** Edita nome e/ou roles globais de um usuário. Requer DEV ou ADMIN. */
+  updateUser: (userId: string, data: { full_name?: string; global_roles?: string[] }) =>
+    api.patch<AdminUserItem>(`/admin/users/${userId}`, data as Record<string, unknown>),
 };
 
 export interface AdminUserItem {

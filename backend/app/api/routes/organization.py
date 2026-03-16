@@ -18,7 +18,7 @@ from app.schemas.organization import (
 from app.services.organization import (
     OrgServiceError, create_org_unit, send_invite, respond_to_invite,
     get_org_tree, get_org_unit_members, get_org_unit_pending_invites,
-    is_coordinator_of, get_user_global_roles,
+    is_coordinator_of, get_user_global_roles, update_org_unit,
 )
 
 router = APIRouter(prefix="/org", tags=["organization"])
@@ -556,5 +556,48 @@ async def get_unit_permissions(
 ):
     """Retorna permissões do usuário na unidade."""
     from app.services.organization import get_user_permissions
-    
+
     return get_user_permissions(db, user.id, org_unit_id)
+
+
+# =============================================================================
+# EDIÇÃO DE UNIDADES
+# =============================================================================
+
+from pydantic import BaseModel as _BaseModel
+
+class UpdateOrgUnitRequest(_BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+@router.patch("/units/{unit_id}", response_model=OrgUnitOut)
+async def update_org_unit_endpoint(
+    unit_id: UUID,
+    data: UpdateOrgUnitRequest,
+    user: CurrentUser,
+    db: DBSession,
+):
+    """Edita nome e/ou descrição de uma unidade. Requer permissão hierárquica."""
+    try:
+        unit = update_org_unit(
+            db,
+            unit_id=unit_id,
+            user_id=user.id,
+            name=data.name,
+            description=data.description,
+        )
+    except OrgServiceError as e:
+        handle_org_error(e)
+
+    return OrgUnitOut(
+        id=unit.id,
+        name=unit.name,
+        type=unit.type.value,
+        description=unit.description,
+        visibility=unit.visibility.value,
+        is_active=unit.is_active,
+        parent_id=unit.parent_id,
+        slug=unit.slug,
+        created_at=unit.created_at,
+    )

@@ -53,6 +53,85 @@ def get_user_global_roles(db: Session, user_id: UUID) -> list[str]:
     return [r[0] for r in result.all()]
 
 
+def _is_descendant_of(db: Session, unit: OrgUnit, ancestor_id: UUID) -> bool:
+    """Verifica se unit é descendente de ancestor_id subindo a árvore via parent_id."""
+    current_parent_id = unit.parent_id
+    while current_parent_id is not None:
+        if current_parent_id == ancestor_id:
+            return True
+        parent = db.get(OrgUnit, current_parent_id)
+        if not parent:
+            break
+        current_parent_id = parent.parent_id
+    return False
+
+
+def can_edit_unit(db: Session, user_id: UUID, unit_id: UUID) -> bool:
+    """
+    Verifica se o usuário pode editar a unidade, conforme hierarquia:
+    - DEV/ADMIN global → pode editar qualquer unidade
+    - Coordenador do CONSELHO_GERAL → pode editar qualquer unidade
+    - Coordenador do CONSELHO_EXECUTIVO → pode editar SETOR, MINISTERIO, GRUPO
+    - Coordenador de SETOR → pode editar MINISTERIO/GRUPO filhos do seu setor
+    """
+    global_roles = get_user_global_roles(db, user_id)
+    if any(r in global_roles for r in ["DEV", "ADMIN"]):
+        return True
+
+    unit = db.get(OrgUnit, unit_id)
+    if not unit or not unit.is_active:
+        return False
+
+    coord_memberships = db.execute(
+        select(OrgMembership)
+        .where(
+            OrgMembership.user_id == user_id,
+            OrgMembership.role == OrgRoleCode.COORDINATOR,
+            OrgMembership.status == MembershipStatus.ACTIVE,
+        )
+    ).scalars().all()
+
+    for m in coord_memberships:
+        coord_unit = db.get(OrgUnit, m.org_unit_id)
+        if not coord_unit or not coord_unit.is_active:
+            continue
+        if coord_unit.type == OrgUnitType.CONSELHO_GERAL:
+            return True
+        if coord_unit.type == OrgUnitType.CONSELHO_EXECUTIVO:
+            if unit.type in [OrgUnitType.SETOR, OrgUnitType.MINISTERIO, OrgUnitType.GRUPO]:
+                return True
+        if coord_unit.type == OrgUnitType.SETOR:
+            if unit.type in [OrgUnitType.MINISTERIO, OrgUnitType.GRUPO]:
+                if _is_descendant_of(db, unit, coord_unit.id):
+                    return True
+    return False
+
+
+def update_org_unit(
+    db: Session,
+    unit_id: UUID,
+    user_id: UUID,
+    name: str | None = None,
+    description: str | None = None,
+) -> OrgUnit:
+    """Edita nome e/ou descrição de uma unidade organizacional."""
+    if not can_edit_unit(db, user_id, unit_id):
+        raise OrgServiceError("permission_denied", "Sem permissão para editar esta entidade")
+    unit = db.get(OrgUnit, unit_id)
+    if not unit or not unit.is_active:
+        raise OrgServiceError("not_found", "Entidade não encontrada")
+    if name is not None:
+        stripped = name.strip()
+        if not stripped:
+            raise OrgServiceError("invalid_data", "Nome não pode ser vazio")
+        unit.name = stripped
+    if description is not None:
+        unit.description = description.strip() or None
+    db.commit()
+    db.refresh(unit)
+    return unit
+
+
 def is_coordinator_of(db: Session, user_id: UUID, org_unit_id: UUID) -> bool:
     """Verifica se usuário é coordenador da unidade."""
     result = db.execute(
