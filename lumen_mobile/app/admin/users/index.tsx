@@ -15,10 +15,14 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  ScrollView,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { adminUserService, AdminUserItem } from '@/services';
+import api from '@/services/api';
 
 const colors = {
   admin: '#7c3aed',
@@ -48,6 +52,8 @@ export default function UsersAdminScreen() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [editUser, setEditUser] = useState<AdminUserItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +77,15 @@ export default function UsersAdminScreen() {
     }
   }, []);
 
-  // Carga inicial
+  // Carga inicial + permissões
   useEffect(() => {
     setLoading(true);
-    fetchUsers('', 0).finally(() => setLoading(false));
+    Promise.all([
+      fetchUsers('', 0),
+      api.get<{ has_admin_access: boolean }>('/inbox/permissions')
+        .then((p) => setIsAdmin(p.has_admin_access || false))
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, [fetchUsers]);
 
   // Busca com debounce
@@ -113,9 +124,16 @@ export default function UsersAdminScreen() {
         </View>
 
         <View style={styles.userInfo}>
-          <Text style={styles.userName} numberOfLines={1}>
-            {item.name ?? <Text style={{ color: colors.gray, fontStyle: 'italic' }}>Sem nome</Text>}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+            <Text style={[styles.userName, { flex: 1 }]} numberOfLines={1}>
+              {item.name ?? <Text style={{ color: colors.gray, fontStyle: 'italic' }}>Sem nome</Text>}
+            </Text>
+            {isAdmin && (
+              <TouchableOpacity onPress={() => setEditUser(item)} style={styles.editBtn}>
+                <Ionicons name="pencil-outline" size={16} color={colors.admin} />
+              </TouchableOpacity>
+            )}
+          </View>
           <Text style={styles.userEmail} numberOfLines={1}>{item.email ?? '—'}</Text>
 
           <View style={styles.badgeRow}>
@@ -218,9 +236,195 @@ export default function UsersAdminScreen() {
           />
         )}
       </View>
+
+      {/* Modal de edição de usuário */}
+      <EditUserModal
+        user={editUser}
+        onClose={() => setEditUser(null)}
+        onSuccess={(updated) => {
+          setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+          setEditUser(null);
+        }}
+      />
     </>
   );
 }
+
+// =============================================================================
+// EditUserModal
+// =============================================================================
+const GLOBAL_ROLES = [
+  { code: 'DEV',       label: 'Dev',        color: '#1d4ed8' },
+  { code: 'ADMIN',     label: 'Admin',      color: '#7c3aed' },
+  { code: 'SECRETARY', label: 'Secretário', color: '#0891b2' },
+];
+
+function EditUserModal({
+  user,
+  onClose,
+  onSuccess,
+}: {
+  user: AdminUserItem | null;
+  onClose: () => void;
+  onSuccess: (updated: AdminUserItem) => void;
+}) {
+  const [fullName, setFullName] = useState('');
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.name ?? '');
+      setSelectedRoles([...user.global_roles]);
+      setError(null);
+    }
+  }, [user]);
+
+  const toggleRole = (code: string) => {
+    setSelectedRoles((prev) =>
+      prev.includes(code) ? prev.filter((r) => r !== code) : [...prev, code]
+    );
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const updated = await adminUserService.updateUser(user.id, {
+        full_name: fullName.trim() || undefined,
+        global_roles: selectedRoles,
+      });
+      onSuccess(updated);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail?.message ?? 'Erro ao salvar';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={!!user} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={modalStyles.container}>
+        <View style={modalStyles.header}>
+          <Text style={modalStyles.title}>Editar Usuário</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={modalStyles.body}>
+          {/* Avatar + email (read-only) */}
+          {user && (
+            <View style={modalStyles.userRow}>
+              <View style={modalStyles.avatar}>
+                <Text style={modalStyles.avatarText}>
+                  {(user.name ?? user.email ?? '?')[0].toUpperCase()}
+                </Text>
+              </View>
+              <Text style={modalStyles.email} numberOfLines={1}>{user.email ?? '—'}</Text>
+            </View>
+          )}
+
+          <Text style={modalStyles.label}>Nome completo</Text>
+          <TextInput
+            style={modalStyles.input}
+            value={fullName}
+            onChangeText={(t) => { setFullName(t); setError(null); }}
+            placeholder="Nome completo do usuário"
+            placeholderTextColor={colors.gray}
+            maxLength={120}
+          />
+
+          <Text style={modalStyles.label}>Cargos globais</Text>
+          <View style={modalStyles.rolesRow}>
+            {GLOBAL_ROLES.map((r) => {
+              const active = selectedRoles.includes(r.code);
+              return (
+                <TouchableOpacity
+                  key={r.code}
+                  style={[
+                    modalStyles.roleChip,
+                    active
+                      ? { backgroundColor: r.color, borderColor: r.color }
+                      : { borderColor: r.color },
+                  ]}
+                  onPress={() => toggleRole(r.code)}
+                >
+                  <Text style={[modalStyles.roleChipText, active && { color: colors.white }]}>
+                    {r.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={modalStyles.hint}>Toque para ativar/desativar</Text>
+
+          {error && <Text style={modalStyles.errorText}>{error}</Text>}
+        </ScrollView>
+
+        <View style={modalStyles.footer}>
+          <TouchableOpacity style={modalStyles.cancelBtn} onPress={onClose} disabled={loading}>
+            <Text style={modalStyles.cancelBtnText}>Cancelar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={modalStyles.saveBtn} onPress={handleSave} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator size="small" color={colors.white} />
+            ) : (
+              <Text style={modalStyles.saveBtnText}>Salvar</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const modalStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.white },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: colors.lightGray,
+  },
+  title: { fontSize: 16, fontWeight: '700', color: colors.text },
+  body: { flex: 1, padding: 16 },
+  footer: {
+    flexDirection: 'row', gap: 12, padding: 16,
+    borderTopWidth: 1, borderTopColor: colors.lightGray,
+  },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  avatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.admin, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { color: colors.white, fontWeight: '700', fontSize: 18 },
+  email: { fontSize: 13, color: colors.gray, flex: 1 },
+  label: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: 16, marginBottom: 6 },
+  input: {
+    borderWidth: 1, borderColor: colors.lightGray, borderRadius: 10,
+    padding: 12, fontSize: 15, color: colors.text, backgroundColor: '#fafafa',
+  },
+  rolesRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  roleChip: {
+    borderWidth: 2, borderRadius: 20,
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
+  roleChipText: { fontSize: 13, fontWeight: '700', color: colors.text },
+  hint: { fontSize: 11, color: colors.gray, marginTop: 6 },
+  errorText: { color: colors.danger, fontSize: 13, marginTop: 12 },
+  cancelBtn: {
+    flex: 1, borderWidth: 2, borderColor: colors.admin,
+    borderRadius: 10, paddingVertical: 14, alignItems: 'center',
+  },
+  cancelBtnText: { color: colors.admin, fontWeight: '700', fontSize: 15 },
+  saveBtn: {
+    flex: 1, backgroundColor: colors.admin,
+    borderRadius: 10, paddingVertical: 14, alignItems: 'center',
+  },
+  saveBtnText: { color: colors.white, fontWeight: '700', fontSize: 15 },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.lightGray },
@@ -280,4 +484,5 @@ const styles = StyleSheet.create({
 
   emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { color: colors.gray, fontSize: 15 },
+  editBtn: { padding: 4, marginLeft: 4 },
 });

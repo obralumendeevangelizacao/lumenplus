@@ -6,11 +6,14 @@ Endpoints administrativos.
 SEGURANÇA: Toda visualização de CPF/RG é auditada obrigatoriamente.
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select, or_, func, exists, nullslast
+from pydantic import BaseModel
+from sqlalchemy import select, or_, func, exists, nullslast, delete
 
 from app.api.deps import CurrentUser, DBSession
-from app.db.models import UserProfile, User, UserIdentity
+from app.db.models import UserProfile, User, UserIdentity, UserGlobalRole, GlobalRole
 from app.services.organization import get_user_global_roles
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -90,3 +93,81 @@ async def list_users(
         })
 
     return {"users": result, "total": total, "limit": limit, "offset": offset}
+
+
+# =============================================================================
+# USERS — edição administrativa
+# =============================================================================
+
+class UpdateUserRequest(BaseModel):
+    full_name: str | None = None
+    global_roles: list[str] | None = None  # Ex: ["DEV", "ADMIN"]
+
+
+@router.patch("/users/{user_id}")
+async def update_user(
+    user_id: UUID,
+    data: UpdateUserRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """
+    Edita nome e/ou roles globais de um usuário.
+    Requer DEV ou ADMIN.
+    """
+    global_roles = get_user_global_roles(db, current_user.id)
+    if not any(r in global_roles for r in ["DEV", "ADMIN"]):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Sem permissão para editar usuários"},
+        )
+
+    target = db.get(User, user_id)
+    if not target or not target.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": "Usuário não encontrado"},
+        )
+
+    # Atualiza nome no perfil
+    if data.full_name is not None:
+        profile = target.profile
+        if profile is None:
+            profile = UserProfile(user_id=user_id, status="INCOMPLETE")
+            db.add(profile)
+        profile.full_name = data.full_name.strip() or None
+
+    # Atualiza roles globais (substitui completamente)
+    if data.global_roles is not None:
+        # Remove todas as roles atuais
+        db.execute(
+            delete(UserGlobalRole).where(UserGlobalRole.user_id == user_id)
+        )
+        # Insere as novas
+        allowed_roles = {"DEV", "ADMIN", "SECRETARY"}
+        for role_code in data.global_roles:
+            role_code = role_code.upper().strip()
+            if role_code not in allowed_roles:
+                continue
+            role = db.execute(
+                select(GlobalRole).where(GlobalRole.code == role_code)
+            ).scalar_one_or_none()
+            if role:
+                db.add(UserGlobalRole(user_id=user_id, global_role_id=role.id))
+
+    db.commit()
+    db.refresh(target)
+
+    profile = target.profile
+    email = target.identities[0].email if target.identities else None
+    updated_roles = get_user_global_roles(db, user_id)
+
+    return {
+        "id": str(target.id),
+        "name": profile.full_name if profile else None,
+        "email": email,
+        "photo_url": profile.photo_url if profile else None,
+        "profile_status": profile.status if profile else "INCOMPLETE",
+        "global_roles": updated_roles,
+        "created_at": target.created_at.isoformat(),
+    }
