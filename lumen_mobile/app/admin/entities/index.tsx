@@ -246,7 +246,7 @@ export default function EntitiesScreen() {
               }
             >
               <Ionicons name="add-circle" size={20} color={colors.white} />
-              <Text style={styles.createRootBtnText}>Criar Conselho Geral</Text>
+              <Text style={styles.createRootBtnText}>Criar Entidade</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -348,7 +348,7 @@ function CreateUnitModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>
-            {state.isRoot ? 'Criar Conselho Geral' : `Criar em: ${state.parentName}`}
+            {state.isRoot ? 'Criar Entidade' : `Criar em: ${state.parentName}`}
           </Text>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color={colors.text} />

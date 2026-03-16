@@ -7,7 +7,7 @@ SEGURANÇA: Toda visualização de CPF/RG é auditada obrigatoriamente.
 """
 
 from fastapi import APIRouter, HTTPException, Query
-from sqlalchemy import select, or_, func
+from sqlalchemy import select, or_, func, exists, nullslast
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import UserProfile, User, UserIdentity
@@ -39,42 +39,39 @@ async def list_users(
             detail={"error": "forbidden", "message": "Sem permissão para listar usuários"},
         )
 
-    # Base query: join profile + identities
-    stmt = (
+    # Join apenas com UserProfile (1-para-1) para evitar duplicatas.
+    # Busca por email usa EXISTS → sem JOIN com UserIdentity na query principal.
+    def _apply_search(stmt, term: str):
+        email_match = exists().where(
+            UserIdentity.user_id == User.id,
+            UserIdentity.email.ilike(term),
+        )
+        return stmt.where(
+            or_(UserProfile.full_name.ilike(term), email_match)
+        )
+
+    base = (
         select(User)
         .join(UserProfile, UserProfile.user_id == User.id, isouter=True)
-        .join(UserIdentity, UserIdentity.user_id == User.id, isouter=True)
         .where(User.is_active == True)  # noqa: E712
     )
 
     if search.strip():
-        term = f"%{search.strip()}%"
-        stmt = stmt.where(
-            or_(
-                UserProfile.full_name.ilike(term),
-                UserIdentity.email.ilike(term),
-            )
-        )
+        base = _apply_search(base, f"%{search.strip()}%")
 
-    stmt = stmt.distinct().order_by(UserProfile.full_name.asc()).offset(offset).limit(limit)
+    # Paginação
+    stmt = base.order_by(nullslast(UserProfile.full_name.asc())).offset(offset).limit(limit)
     users = db.execute(stmt).scalars().all()
 
-    # Conta total
-    count_stmt = (
-        select(func.count(User.id.distinct()))
+    # Contagem total
+    count_base = (
+        select(func.count(User.id))
         .join(UserProfile, UserProfile.user_id == User.id, isouter=True)
-        .join(UserIdentity, UserIdentity.user_id == User.id, isouter=True)
         .where(User.is_active == True)  # noqa: E712
     )
     if search.strip():
-        term = f"%{search.strip()}%"
-        count_stmt = count_stmt.where(
-            or_(
-                UserProfile.full_name.ilike(term),
-                UserIdentity.email.ilike(term),
-            )
-        )
-    total = db.execute(count_stmt).scalar() or 0
+        count_base = _apply_search(count_base, f"%{search.strip()}%")
+    total = db.execute(count_base).scalar() or 0
 
     result = []
     for u in users:
