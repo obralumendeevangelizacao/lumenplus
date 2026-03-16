@@ -14,7 +14,7 @@ from sqlalchemy import select, or_, func, exists, nullslast, delete
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import UserProfile, User, UserIdentity, UserGlobalRole, GlobalRole
-from app.services.organization import get_user_global_roles
+from app.services.organization import get_user_global_roles, is_conselho_geral_coordinator
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -37,10 +37,11 @@ async def list_users(
     """
     global_roles = get_user_global_roles(db, current_user.id)
     if not any(r in global_roles for r in ["DEV", "ADMIN", "SECRETARY"]):
-        raise HTTPException(
-            status_code=403,
-            detail={"error": "forbidden", "message": "Sem permissão para listar usuários"},
-        )
+        if not is_conselho_geral_coordinator(db, current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "forbidden", "message": "Sem permissão para listar usuários"},
+            )
 
     # Join apenas com UserProfile (1-para-1) para evitar duplicatas.
     # Busca por email usa EXISTS → sem JOIN com UserIdentity na query principal.
@@ -144,7 +145,7 @@ async def update_user(
             delete(UserGlobalRole).where(UserGlobalRole.user_id == user_id)
         )
         # Insere as novas
-        allowed_roles = {"DEV", "ADMIN", "SECRETARY"}
+        allowed_roles = {"DEV", "ADMIN", "SECRETARY", "AVISOS"}
         for role_code in data.global_roles:
             role_code = role_code.upper().strip()
             if role_code not in allowed_roles:
@@ -158,6 +159,79 @@ async def update_user(
     db.commit()
     db.refresh(target)
 
+    profile = target.profile
+    email = target.identities[0].email if target.identities else None
+    updated_roles = get_user_global_roles(db, user_id)
+
+    return {
+        "id": str(target.id),
+        "name": profile.full_name if profile else None,
+        "email": email,
+        "photo_url": profile.photo_url if profile else None,
+        "profile_status": profile.status if profile else "INCOMPLETE",
+        "global_roles": updated_roles,
+        "created_at": target.created_at.isoformat(),
+    }
+
+
+# =============================================================================
+# USERS — concessão/revogação do cargo AVISOS
+# =============================================================================
+
+class ToggleAvisosRequest(BaseModel):
+    grant: bool  # True = conceder, False = revogar
+
+
+@router.post("/users/{user_id}/toggle-avisos")
+async def toggle_avisos_role(
+    user_id: UUID,
+    data: ToggleAvisosRequest,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    """
+    Concede ou revoga o cargo AVISOS de um usuário.
+    Requer DEV, ADMIN ou ser coordenador do Conselho Geral.
+    """
+    global_roles = get_user_global_roles(db, current_user.id)
+    if not any(r in global_roles for r in ["DEV", "ADMIN"]):
+        if not is_conselho_geral_coordinator(db, current_user.id):
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "forbidden", "message": "Sem permissão para gerenciar o cargo Avisos"},
+            )
+
+    target = db.get(User, user_id)
+    if not target or not target.is_active:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": "Usuário não encontrado"},
+        )
+
+    avisos_role = db.execute(
+        select(GlobalRole).where(GlobalRole.code == "AVISOS")
+    ).scalar_one_or_none()
+    if not avisos_role:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "config_error", "message": "Cargo AVISOS não configurado. Execute o seed novamente."},
+        )
+
+    existing = db.execute(
+        select(UserGlobalRole).where(
+            UserGlobalRole.user_id == user_id,
+            UserGlobalRole.global_role_id == avisos_role.id,
+        )
+    ).scalar_one_or_none()
+
+    if data.grant and not existing:
+        db.add(UserGlobalRole(user_id=user_id, global_role_id=avisos_role.id))
+        db.commit()
+    elif not data.grant and existing:
+        db.delete(existing)
+        db.commit()
+
+    db.refresh(target)
     profile = target.profile
     email = target.identities[0].email if target.identities else None
     updated_roles = get_user_global_roles(db, user_id)

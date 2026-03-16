@@ -132,6 +132,22 @@ def update_org_unit(
     return unit
 
 
+def is_conselho_geral_coordinator(db: Session, user_id: UUID) -> bool:
+    """Retorna True se o usuário é coordenador ativo de qualquer CONSELHO_GERAL."""
+    result = db.execute(
+        select(OrgMembership)
+        .join(OrgUnit, OrgUnit.id == OrgMembership.org_unit_id)
+        .where(
+            OrgMembership.user_id == user_id,
+            OrgMembership.role == OrgRoleCode.COORDINATOR,
+            OrgMembership.status == MembershipStatus.ACTIVE,
+            OrgUnit.type == OrgUnitType.CONSELHO_GERAL,
+            OrgUnit.is_active == True,  # noqa: E712
+        )
+    ).scalar_one_or_none()
+    return result is not None
+
+
 def is_coordinator_of(db: Session, user_id: UUID, org_unit_id: UUID) -> bool:
     """Verifica se usuário é coordenador da unidade."""
     result = db.execute(

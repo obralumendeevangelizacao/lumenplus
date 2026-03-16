@@ -270,6 +270,13 @@ export const adminUserService = {
   /** Edita nome e/ou roles globais de um usuário. Requer DEV ou ADMIN. */
   updateUser: (userId: string, data: { full_name?: string; global_roles?: string[] }) =>
     api.patch<AdminUserItem>(`/admin/users/${userId}`, data as Record<string, unknown>),
+
+  /**
+   * Concede ou revoga o cargo AVISOS de um usuário.
+   * Requer DEV, ADMIN ou ser coordenador do Conselho Geral.
+   */
+  toggleAvisos: (userId: string, grant: boolean) =>
+    api.post<AdminUserItem>(`/admin/users/${userId}/toggle-avisos`, { grant }),
 };
 
 export interface AdminUserItem {

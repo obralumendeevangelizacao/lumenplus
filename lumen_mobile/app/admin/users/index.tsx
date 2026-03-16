@@ -23,6 +23,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { adminUserService, AdminUserItem } from '@/services';
 import api from '@/services/api';
 
+interface PermissionsResponse {
+  permissions: string[];
+  has_admin_access: boolean;
+  is_global_admin: boolean;
+}
+
 const colors = {
   admin: '#7c3aed',
   adminLight: '#ede9fe',
@@ -39,6 +45,7 @@ const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   DEV:       { label: 'Dev',       color: '#1d4ed8' },
   ADMIN:     { label: 'Admin',     color: '#7c3aed' },
   SECRETARY: { label: 'Secretário', color: '#0891b2' },
+  AVISOS:    { label: 'Avisos',    color: '#d97706' },
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -52,6 +59,7 @@ export default function UsersAdminScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isGlobalAdmin, setIsGlobalAdmin] = useState(false);
   const [editUser, setEditUser] = useState<AdminUserItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -81,8 +89,11 @@ export default function UsersAdminScreen() {
     setLoading(true);
     Promise.all([
       fetchUsers('', 0),
-      api.get<{ has_admin_access: boolean }>('/inbox/permissions')
-        .then((p) => setIsAdmin(p.has_admin_access || false))
+      api.get<PermissionsResponse>('/inbox/permissions')
+        .then((p) => {
+          setIsAdmin(p.has_admin_access || false);
+          setIsGlobalAdmin(p.is_global_admin || false);
+        })
         .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [fetchUsers]);
@@ -237,6 +248,7 @@ export default function UsersAdminScreen() {
       {/* Modal de edição de usuário */}
       <EditUserModal
         user={editUser}
+        isGlobalAdmin={isGlobalAdmin}
         onClose={() => setEditUser(null)}
         onSuccess={(updated) => {
           setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -250,18 +262,28 @@ export default function UsersAdminScreen() {
 // =============================================================================
 // EditUserModal
 // =============================================================================
-const GLOBAL_ROLES = [
+
+// Cargos visíveis apenas para admins globais (DEV/ADMIN)
+const GLOBAL_ADMIN_ROLES = [
   { code: 'DEV',       label: 'Dev',        color: '#1d4ed8' },
   { code: 'ADMIN',     label: 'Admin',      color: '#7c3aed' },
   { code: 'SECRETARY', label: 'Secretário', color: '#0891b2' },
+  { code: 'AVISOS',    label: 'Avisos',     color: '#d97706' },
+];
+
+// Cargo visível para coordenadores do Conselho Geral (não-admins globais)
+const CONSELHO_ROLES = [
+  { code: 'AVISOS', label: 'Avisos', color: '#d97706' },
 ];
 
 function EditUserModal({
   user,
+  isGlobalAdmin,
   onClose,
   onSuccess,
 }: {
   user: AdminUserItem | null;
+  isGlobalAdmin: boolean;
   onClose: () => void;
   onSuccess: (updated: AdminUserItem) => void;
 }) {
@@ -269,6 +291,8 @@ function EditUserModal({
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const availableRoles = isGlobalAdmin ? GLOBAL_ADMIN_ROLES : CONSELHO_ROLES;
 
   useEffect(() => {
     if (user) {
@@ -289,10 +313,18 @@ function EditUserModal({
     setLoading(true);
     setError(null);
     try {
-      const updated = await adminUserService.updateUser(user.id, {
-        full_name: fullName.trim() || undefined,
-        global_roles: selectedRoles,
-      });
+      let updated: AdminUserItem;
+      if (isGlobalAdmin) {
+        // Admin global: edita nome + todos os cargos
+        updated = await adminUserService.updateUser(user.id, {
+          full_name: fullName.trim() || undefined,
+          global_roles: selectedRoles,
+        });
+      } else {
+        // Coordenador do Conselho Geral: só pode conceder/revogar AVISOS
+        const wantAvisos = selectedRoles.includes('AVISOS');
+        updated = await adminUserService.toggleAvisos(user.id, wantAvisos);
+      }
       onSuccess(updated);
     } catch (e: any) {
       const msg = e?.response?.data?.detail?.message ?? 'Erro ao salvar';
@@ -325,19 +357,24 @@ function EditUserModal({
             </View>
           )}
 
-          <Text style={modalStyles.label}>Nome completo</Text>
-          <TextInput
-            style={modalStyles.input}
-            value={fullName}
-            onChangeText={(t) => { setFullName(t); setError(null); }}
-            placeholder="Nome completo do usuário"
-            placeholderTextColor={colors.gray}
-            maxLength={120}
-          />
+          {/* Nome completo: apenas admins globais podem editar */}
+          {isGlobalAdmin && (
+            <>
+              <Text style={modalStyles.label}>Nome completo</Text>
+              <TextInput
+                style={modalStyles.input}
+                value={fullName}
+                onChangeText={(t) => { setFullName(t); setError(null); }}
+                placeholder="Nome completo do usuário"
+                placeholderTextColor={colors.gray}
+                maxLength={120}
+              />
+            </>
+          )}
 
           <Text style={modalStyles.label}>Cargos globais</Text>
           <View style={modalStyles.rolesRow}>
-            {GLOBAL_ROLES.map((r) => {
+            {availableRoles.map((r) => {
               const active = selectedRoles.includes(r.code);
               return (
                 <TouchableOpacity
