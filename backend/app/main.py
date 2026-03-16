@@ -127,10 +127,17 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         path=request.url.path,
         method=request.method,
     )
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={"detail": {"error": "internal_error", "message": "Erro interno do servidor"}},
     )
+    # Exception handlers podem bypassar o CORSMiddleware no Starlette/FastAPI.
+    # Adicionamos os headers manualmente para origens permitidas.
+    origin = request.headers.get("origin", "")
+    if origin and (origin in settings.cors_origins_list or settings.cors_origins_list == ["*"]):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 # Health check
