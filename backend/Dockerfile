@@ -15,8 +15,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia código
 COPY . .
 
-# Torna o script de start executável
-RUN chmod +x /app/start.sh
+# Corrige line endings (CRLF→LF) e torna executável
+RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 
 # Expõe porta (Railway injeta PORT automaticamente)
 EXPOSE 8000
