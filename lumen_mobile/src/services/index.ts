@@ -204,6 +204,68 @@ export const inboxService = {
 };
 
 // =============================================================================
+// ORG ADMIN — criação e gestão de entidades
+// =============================================================================
+export const orgAdminService = {
+  /** Cria unidade raiz (CONSELHO_GERAL). Requer papel DEV ou ADMIN. */
+  createRootUnit: (data: { name: string; description?: string }) =>
+    api.post('/org/root-unit', data as Record<string, unknown>),
+
+  /** Cria unidade filha de um parent. Requer ser coordenador do parent. */
+  createChildUnit: (
+    parentId: string,
+    data: { name: string; description?: string; group_type?: string }
+  ) => api.post(`/org/units/${parentId}/children`, data as Record<string, unknown>),
+
+  /** Lista membros de uma unidade. */
+  getMembers: (orgUnitId: string) =>
+    api.get(`/org/units/${orgUnitId}/members`),
+
+  /** Busca usuários para convidar. */
+  searchUsers: (orgUnitId: string, q: string) =>
+    api.get(`/org/units/${orgUnitId}/search-users?q=${encodeURIComponent(q)}`),
+
+  /** Envia convite para um usuário. */
+  sendInvite: (orgUnitId: string, data: { user_id: string; role?: string; message?: string }) =>
+    api.post(`/org/units/${orgUnitId}/invites`, data as Record<string, unknown>),
+
+  /** Lista convites pendentes de uma unidade. */
+  getPendingInvites: (orgUnitId: string) =>
+    api.get(`/org/units/${orgUnitId}/invites/pending`),
+
+  /** Remove membro de uma unidade. */
+  removeMember: (orgUnitId: string, memberUserId: string) =>
+    api.delete(`/org/units/${orgUnitId}/members/${memberUserId}`),
+};
+
+// =============================================================================
+// ADMIN USERS — gestão de usuários
+// =============================================================================
+export const adminUserService = {
+  /** Lista usuários com busca. Requer DEV, ADMIN ou SECRETARY. */
+  listUsers: (params?: { search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit !== undefined) q.set('limit', String(params.limit));
+    if (params?.offset !== undefined) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return api.get<{ users: AdminUserItem[]; total: number; limit: number; offset: number }>(
+      `/admin/users${qs ? `?${qs}` : ''}`
+    );
+  },
+};
+
+export interface AdminUserItem {
+  id: string;
+  name: string | null;
+  email: string | null;
+  photo_url: string | null;
+  profile_status: string;
+  global_roles: string[];
+  created_at: string;
+}
+
+// =============================================================================
 // VERIFICATION
 // =============================================================================
 export const verificationService = {
@@ -233,6 +295,8 @@ export default {
   profile: profileService,
   legal: legalService,
   org: orgService,
+  orgAdmin: orgAdminService,
+  adminUser: adminUserService,
   invite: inviteService,
   membership: membershipService,
   inbox: inboxService,

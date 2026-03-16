@@ -46,6 +46,65 @@ def handle_org_error(e: OrgServiceError):
 # ORG UNITS
 # =============================================================================
 
+@router.post("/root-unit", response_model=OrgUnitOut, status_code=201)
+async def create_root_unit(
+    data: CreateOrgUnitRequest,
+    user: CurrentUser,
+    db: DBSession,
+):
+    """
+    Cria a unidade raiz (CONSELHO_GERAL). Requer papel global DEV ou ADMIN.
+    Só pode existir uma unidade raiz ativa.
+    """
+    from sqlalchemy import select as sa_select
+    global_roles = get_user_global_roles(db, user.id)
+    if not any(r in global_roles for r in ["DEV", "ADMIN"]):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "permission_denied", "message": "Requer papel DEV ou ADMIN para criar a unidade raiz"},
+        )
+
+    existing_root = db.execute(
+        sa_select(OrgUnit).where(OrgUnit.parent_id == None, OrgUnit.is_active == True)  # noqa: E711
+    ).scalar_one_or_none()
+
+    if existing_root:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "root_exists", "message": f"Já existe uma unidade raiz: '{existing_root.name}'"},
+        )
+
+    try:
+        unit = create_org_unit(
+            db=db,
+            user_id=user.id,
+            parent_id=None,
+            org_type=OrgUnitType.CONSELHO_GERAL,
+            name=data.name,
+            description=data.description,
+            visibility=Visibility.PUBLIC,
+            group_type=None,
+            coordinator_user_ids=data.coordinator_user_ids,
+        )
+        db.commit()
+        db.refresh(unit)
+
+        return OrgUnitOut(
+            id=unit.id,
+            type=unit.type.value,
+            group_type=None,
+            name=unit.name,
+            slug=unit.slug,
+            description=unit.description,
+            visibility=unit.visibility.value,
+            is_active=unit.is_active,
+            parent_id=unit.parent_id,
+            created_at=unit.created_at,
+        )
+    except OrgServiceError as e:
+        handle_org_error(e)
+
+
 @router.get("/tree", response_model=OrgTreeResponse)
 async def get_organization_tree(
     user: CurrentUser,
