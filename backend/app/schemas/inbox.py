@@ -168,3 +168,4 @@ class UserPermissionsResponse(BaseModel):
     """Lista de permissões do usuário."""
     permissions: list[str]
     has_admin_access: bool
+    is_global_admin: bool = False

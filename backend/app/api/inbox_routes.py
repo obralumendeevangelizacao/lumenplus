@@ -11,7 +11,7 @@ from fastapi.routing import APIRouter
 
 from app.api.deps import CurrentUser, DBSession
 from app.services.inbox_service import InboxService, PERMISSION_SEND_INBOX
-from app.services.organization import get_user_global_roles
+from app.services.organization import get_user_global_roles, is_conselho_geral_coordinator
 from app.schemas.inbox import (
     InboxSendRequest,
     InboxPreviewRequest,
@@ -32,27 +32,45 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 
 # === HELPER DE PERMISSÃO ===
 
+def _has_full_send_access(db, user_id) -> bool:
+    """
+    Retorna True se o usuário tem acesso nativo completo de envio:
+    role global AVISOS, DEV ou ADMIN, ou coordenador do Conselho Geral.
+    """
+    global_roles = get_user_global_roles(db, user_id)
+    if any(r in global_roles for r in ["DEV", "ADMIN", "AVISOS"]):
+        return True
+    return is_conselho_geral_coordinator(db, user_id)
+
+
 def _check_send_permission(db: DBSession, current_user: CurrentUser) -> None:
     """
     Levanta 403 se o usuário não pode enviar avisos.
-    Aceita tanto CAN_SEND_INBOX explícito quanto ser coordenador de qualquer OrgUnit.
+    Aceita CAN_SEND_INBOX, coordenador de qualquer OrgUnit, role AVISOS, DEV ou ADMIN.
     """
     service = InboxService(db)
-    if not service.user_can_send(current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"error": "forbidden", "message": "Você não tem permissão para enviar avisos"},
-        )
+    if service.user_can_send(current_user.id) or _has_full_send_access(db, current_user.id):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"error": "forbidden", "message": "Você não tem permissão para enviar avisos"},
+    )
 
 
 def _check_global_send_permission(db: DBSession, current_user: CurrentUser) -> None:
-    """Levanta 403 se o usuário não tiver permissão CAN_SEND_INBOX (envio global)."""
+    """
+    Levanta 403 se o usuário não pode enviar avisos globais (para todos).
+    Aceita CAN_SEND_INBOX, role AVISOS, DEV, ADMIN ou coordenador do Conselho Geral.
+    """
     service = InboxService(db)
-    if not service.user_has_permission(current_user.id, PERMISSION_SEND_INBOX):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"error": "forbidden", "message": "Você não tem permissão para enviar avisos globais"},
-        )
+    if service.user_has_permission(current_user.id, PERMISSION_SEND_INBOX):
+        return
+    if _has_full_send_access(db, current_user.id):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"error": "forbidden", "message": "Você não tem permissão para enviar avisos globais"},
+    )
 
 
 # === ROTAS DO USUÁRIO ===
@@ -137,13 +155,16 @@ def get_my_permissions(
     service = InboxService(db)
     permissions = service.get_user_permissions(current_user.id)
     global_roles = get_user_global_roles(db, current_user.id)
+    is_global_admin = any(r in global_roles for r in ["DEV", "ADMIN"])
     has_admin = (
         PERMISSION_SEND_INBOX in permissions
-        or any(r in global_roles for r in ["DEV", "ADMIN", "SECRETARY"])
+        or any(r in global_roles for r in ["DEV", "ADMIN", "SECRETARY", "AVISOS"])
+        or is_conselho_geral_coordinator(db, current_user.id)
     )
     return UserPermissionsResponse(
         permissions=permissions,
         has_admin_access=has_admin,
+        is_global_admin=is_global_admin,
     )
 
 
@@ -163,8 +184,11 @@ def get_send_scopes(
     _check_send_permission(db, current_user)
     service = InboxService(db)
     data = service.get_sendable_scopes(current_user.id)
+    # Usuários com acesso nativo completo (AVISOS, DEV, ADMIN, coord. Conselho Geral)
+    # também podem enviar para todos, mesmo sem CAN_SEND_INBOX explícito
+    can_send_to_all = data["can_send_to_all"] or _has_full_send_access(db, current_user.id)
     return SendScopesResponse(
-        can_send_to_all=data["can_send_to_all"],
+        can_send_to_all=can_send_to_all,
         scopes=[OrgScopeResponse(**s) for s in data["scopes"]],
     )
 
@@ -221,14 +245,16 @@ def send_message(
         )
 
     # Coordenador só pode enviar para as suas próprias OrgUnits
+    # (usuários com acesso nativo completo podem enviar para qualquer unidade)
     service = InboxService(db)
     if request.scope_org_unit_id and not service.user_has_permission(current_user.id, PERMISSION_SEND_INBOX):
-        coordinator_ids = {str(u.id) for u in service._coordinator_org_units(current_user.id)}
-        if str(request.scope_org_unit_id) not in coordinator_ids:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"error": "forbidden", "message": "Você não é coordenador desta unidade"},
-            )
+        if not _has_full_send_access(db, current_user.id):
+            coordinator_ids = {str(u.id) for u in service._coordinator_org_units(current_user.id)}
+            if str(request.scope_org_unit_id) not in coordinator_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"error": "forbidden", "message": "Você não é coordenador desta unidade"},
+                )
 
     attachments = [a.model_dump() for a in request.attachments] if request.attachments else None
 
