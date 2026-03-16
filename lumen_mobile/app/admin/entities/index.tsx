@@ -174,17 +174,23 @@ export default function EntitiesScreen() {
   }, []);
 
   const loadPermissions = useCallback(async () => {
+    // Chamadas separadas: se uma falhar, a outra ainda é processada.
+    // Importante: se getMyMemberships() falhar, isGlobalAdmin ainda é definido
+    // corretamente (DEV/ADMIN vêem o botão Editar mesmo sem memberships).
     try {
-      const [perms, memberships] = await Promise.all([
-        api.get<{ has_admin_access: boolean }>('/inbox/permissions'),
-        orgService.getMyMemberships(),
-      ]);
+      const perms = await api.get<{ has_admin_access: boolean }>('/inbox/permissions');
       setIsGlobalAdmin(perms.has_admin_access || false);
+    } catch {
+      // sem acesso admin por padrão
+    }
+
+    try {
+      const memberships = await orgService.getMyMemberships();
       setMyCoordMemberships(
         (memberships as Membership[]).filter((m) => m.role === 'COORDINATOR' && m.status === 'ACTIVE')
       );
     } catch {
-      // silencioso — sem permissões de edição por padrão
+      // sem memberships de coordenação por padrão
     }
   }, []);
 
@@ -747,7 +753,12 @@ function EditEntityModal({
       });
       onSuccess();
     } catch (e: any) {
-      const msg = e?.response?.data?.detail?.message ?? 'Erro ao salvar';
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail;
+      const msg =
+        (typeof detail === 'object' ? detail?.message : detail) ??
+        (typeof detail === 'string' ? detail : null) ??
+        `Erro ao salvar${status ? ` (${status})` : ''}`;
       setError(msg);
     } finally {
       setLoading(false);
