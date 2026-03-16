@@ -155,6 +155,7 @@ async def health():
 from app.api.routes.auth import router as auth_router
 from app.api.profile_routes import router as profile_router   # routes/profile (quebrado) substituido por profile_routes
 from app.api.routes.organization import router as org_router
+from app.api.routes.admin import router as admin_router
 from app.api.inbox_routes import router as inbox_router
 from app.api.verification_routes import router as verify_router  # verificacao de telefone via body
 from app.api.legal_routes import router as legal_router          # /legal/latest e /legal/accept (era orphan — não registrado)
@@ -162,6 +163,7 @@ from app.api.legal_routes import router as legal_router          # /legal/latest
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(org_router)
+app.include_router(admin_router)
 app.include_router(inbox_router)
 app.include_router(verify_router)
 app.include_router(legal_router)
