@@ -19,7 +19,6 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { adminUserService, AdminUserItem } from '@/services';
 import api from '@/services/api';
@@ -172,8 +171,6 @@ export default function UsersAdminScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: 'Usuários' }} />
-
       <View style={styles.container}>
         {/* Barra de busca */}
         <View style={styles.searchBar}>
