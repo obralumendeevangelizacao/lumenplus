@@ -60,6 +60,8 @@ export default function RegisterScreen() {
   const [birthDate, setBirthDate] = useState('');
   const [uf, setUf] = useState('');
   const [city, setCity] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [rg, setRg] = useState('');
 
   // Passo 3 — Vocacional
   const [selectedLifeState, setSelectedLifeState] = useState<CatalogItem | null>(null);
@@ -107,6 +109,14 @@ export default function RegisterScreen() {
     return `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`;
   };
 
+  const formatCpf = (v: string) => {
+    const d = v.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+    return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+  };
+
   const openCatalogModal = (title: string, options: CatalogItem[], onSelect: (item: CatalogItem) => void) => {
     setCatalogModalTitle(title);
     setCatalogModalOptions(options);
@@ -126,12 +136,15 @@ export default function RegisterScreen() {
 
   const validateStep2 = () => {
     const e: Record<string, string> = {};
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length < 10) e.phone = 'Telefone inválido';
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) e.phone = 'Telefone inválido';
     const parts = birthDate.split('/');
     if (parts.length !== 3 || parts[2]?.length !== 4) e.birthDate = 'Data inválida (DD/MM/AAAA)';
     if (!uf) e.uf = 'Selecione o estado';
     if (city.trim().length < 2) e.city = 'Informe a cidade';
+    const cpfDigits = cpf.replace(/\D/g, '');
+    if (cpfDigits.length !== 11) e.cpf = 'CPF deve ter 11 dígitos';
+    if (rg.trim().length < 4) e.rg = 'RG inválido';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -164,6 +177,8 @@ export default function RegisterScreen() {
           phone_e164: phoneE164,
           city: city.trim(),
           state: uf,
+          cpf: cpf.replace(/\D/g, ''),
+          rg: rg.trim(),
           life_state_item_id: selectedLifeState?.id,
           marital_status_item_id: selectedMarital?.id,
           vocational_reality_item_id: selectedVocational?.id,
@@ -291,6 +306,18 @@ export default function RegisterScreen() {
                 onChangeText={t => { setCity(t); setErrors({...errors, city: ''}); }}
                 autoCapitalize="words" />
               {errors.city ? <Text style={styles.errorText}>{errors.city}</Text> : null}
+
+              <TextInput style={[styles.input, errors.cpf && styles.inputError]}
+                placeholder="CPF (000.000.000-00)" value={cpf} placeholderTextColor={colors.gray}
+                onChangeText={t => { setCpf(formatCpf(t)); setErrors({...errors, cpf: ''}); }}
+                keyboardType="numeric" />
+              {errors.cpf ? <Text style={styles.errorText}>{errors.cpf}</Text> : null}
+
+              <TextInput style={[styles.input, errors.rg && styles.inputError]}
+                placeholder="RG" value={rg} placeholderTextColor={colors.gray}
+                onChangeText={t => { setRg(t); setErrors({...errors, rg: ''}); }}
+                autoCapitalize="characters" />
+              {errors.rg ? <Text style={styles.errorText}>{errors.rg}</Text> : null}
 
               <TouchableOpacity style={styles.primaryButton} onPress={handleNext}>
                 <Text style={styles.primaryButtonText}>Continuar</Text>

@@ -2,11 +2,15 @@
  * Tabs Layout
  * ===========
  * Layout das tabs principais do app com novo design.
+ * Verifica se o perfil está completo (has_documents) e redireciona
+ * para preenchimento de CPF/RG se necessário.
  */
 
-import { Tabs } from 'expo-router';
+import { useEffect } from 'react';
+import { Tabs, router } from 'expo-router';
 import { View, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { profileService } from '@/services';
 
 const colors = {
   primary: '#1A859B',
@@ -15,6 +19,19 @@ const colors = {
 };
 
 export default function TabsLayout() {
+  useEffect(() => {
+    (async () => {
+      try {
+        const profile = await profileService.getProfile();
+        if (!profile.has_documents) {
+          router.replace('/(onboarding)/complete-documents');
+        }
+      } catch {
+        // Ignora erros de rede — não bloqueia a navegação
+      }
+    })();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{

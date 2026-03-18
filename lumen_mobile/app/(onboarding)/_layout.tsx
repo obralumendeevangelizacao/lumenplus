@@ -32,6 +32,10 @@ export default function OnboardingLayout() {
         name="verify-phone"
         options={{ title: 'Verificar Telefone' }}
       />
+      <Stack.Screen
+        name="complete-documents"
+        options={{ title: 'Complete seu cadastro', headerBackVisible: false }}
+      />
     </Stack>
   );
 }
