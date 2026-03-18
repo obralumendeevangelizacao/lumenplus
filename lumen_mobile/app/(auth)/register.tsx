@@ -216,8 +216,8 @@ export default function RegisterScreen() {
           phone_e164: phoneE164,
           city: city.trim(),
           state: uf,
-          cpf: cpf.replace(/\D/g, ''),
-          rg: rg.trim(),
+          cpf: cpf.replace(/\D/g, '') || null,
+          rg: rg.trim() || null,
           life_state_item_id: selectedLifeState?.id,
           marital_status_item_id: selectedMarital?.id,
           vocational_reality_item_id: selectedVocational?.id,
@@ -240,8 +240,9 @@ export default function RegisterScreen() {
             relationship: emergencyRelationship.trim() || 'Não informado',
           });
         }
-      } catch {
-        // Erro no perfil não impede o acesso ao app
+      } catch (profileErr) {
+        // Erro no perfil não impede o acesso ao app, mas logamos para debug
+        console.warn('[register] Erro ao salvar perfil:', profileErr);
       }
 
       router.replace('/(tabs)/home');
