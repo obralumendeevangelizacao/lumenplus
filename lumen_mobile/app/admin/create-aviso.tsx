@@ -83,6 +83,9 @@ export default function CreateAvisoScreen() {
   const [showScopeModal, setShowScopeModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     loadScopes();
@@ -149,32 +152,22 @@ export default function CreateAvisoScreen() {
   };
 
   const handleSend = async () => {
-    if (!title.trim()) return Alert.alert('Erro', 'Digite um titulo para o aviso');
-    if (!message.trim()) return Alert.alert('Erro', 'Digite o texto do aviso');
-    if (destMode === 'scope' && !selectedScope) return Alert.alert('Erro', 'Selecione um setor ou grupo');
-    if (destMode === 'filter' && !buildFilters()) return Alert.alert('Erro', 'Selecione pelo menos um filtro');
-
-    const destLabel = destMode === 'all'
-      ? 'todos os membros'
-      : destMode === 'scope'
-        ? selectedScope?.name ?? ''
-        : `${previewCount ?? '?'} membro(s) filtrado(s)`;
-
-    Alert.alert(
-      'Confirmar envio',
-      `Enviar aviso para ${destLabel}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Enviar', onPress: sendAviso },
-      ]
-    );
+    setValidationError(null);
+    setSendError(null);
+    if (!title.trim()) { setValidationError('Digite um titulo para o aviso'); return; }
+    if (!message.trim()) { setValidationError('Digite o texto do aviso'); return; }
+    if (destMode === 'scope' && !selectedScope) { setValidationError('Selecione um setor ou grupo'); return; }
+    if (destMode === 'filter' && !buildFilters()) { setValidationError('Selecione pelo menos um filtro'); return; }
+    setShowConfirmModal(true);
   };
 
   const sendAviso = async () => {
+    setShowConfirmModal(false);
     setLoading(true);
+    setSendError(null);
     try {
       const filters = destMode === 'filter' ? buildFilters() : null;
-      const response = await inboxService.send({
+      await inboxService.send({
         title: title.trim(),
         message: message.trim(),
         type: messageType,
@@ -182,12 +175,10 @@ export default function CreateAvisoScreen() {
         scope_org_unit_id: destMode === 'scope' ? (selectedScope?.id ?? null) : null,
         filters,
       });
-      Alert.alert('Aviso Enviado!', `Enviado para ${response.recipient_count} membro(s).`,
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+      router.back();
     } catch (error: any) {
       const detail = error.response?.data?.detail?.message || error.response?.data?.detail || 'Nao foi possivel enviar o aviso';
-      Alert.alert('Erro', detail);
+      setSendError(typeof detail === 'string' ? detail : 'Nao foi possivel enviar o aviso');
     } finally {
       setLoading(false);
     }
@@ -378,6 +369,20 @@ export default function CreateAvisoScreen() {
           </View>
         )}
 
+        {/* Erros inline */}
+        {validationError && (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={16} color={colors.error} />
+            <Text style={styles.errorText}>{validationError}</Text>
+          </View>
+        )}
+        {sendError && (
+          <View style={styles.errorBox}>
+            <Ionicons name="close-circle" size={16} color={colors.error} />
+            <Text style={styles.errorText}>{sendError}</Text>
+          </View>
+        )}
+
         {/* Botao de envio */}
         <TouchableOpacity
           style={[styles.sendButton, loading && styles.sendButtonDisabled]}
@@ -423,6 +428,42 @@ export default function CreateAvisoScreen() {
             <TouchableOpacity style={styles.modalDoneButton} onPress={() => setShowScopeModal(false)}>
               <Text style={styles.modalDoneText}>Concluir</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de confirmação de envio */}
+      <Modal visible={showConfirmModal} animationType="fade" transparent onRequestClose={() => setShowConfirmModal(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmBox}>
+            <Ionicons name="send" size={32} color={colors.admin} style={{ marginBottom: 12 }} />
+            <Text style={styles.confirmTitle}>Confirmar envio</Text>
+            <Text style={styles.confirmMessage}>
+              Enviar aviso para{' '}
+              <Text style={{ fontWeight: '700' }}>
+                {destMode === 'all'
+                  ? 'todos os membros'
+                  : destMode === 'scope'
+                    ? (selectedScope?.name ?? '')
+                    : `${previewCount ?? '?'} membro(s) filtrado(s)`}
+              </Text>
+              ?
+            </Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity
+                style={styles.confirmCancelBtn}
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <Text style={styles.confirmCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmSendBtn}
+                onPress={sendAviso}
+              >
+                <Ionicons name="send" size={16} color={colors.white} />
+                <Text style={styles.confirmSendText}>Enviar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -523,4 +564,17 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: colors.admin, borderColor: colors.admin },
   modalDoneButton: { margin: 16, padding: 16, backgroundColor: colors.admin, borderRadius: 12, alignItems: 'center' },
   modalDoneText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  // Erros inline
+  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, padding: 12, backgroundColor: '#fef2f2', borderRadius: 10, borderWidth: 1, borderColor: '#fecaca' },
+  errorText: { flex: 1, fontSize: 14, color: colors.error, fontWeight: '500' },
+  // Modal de confirmação
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  confirmBox: { backgroundColor: colors.white, borderRadius: 20, padding: 28, width: '100%', maxWidth: 380, alignItems: 'center' },
+  confirmTitle: { fontSize: 20, fontWeight: '700', color: '#171717', marginBottom: 10 },
+  confirmMessage: { fontSize: 15, color: colors.gray, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  confirmActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  confirmCancelBtn: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#e5e5e5', alignItems: 'center' },
+  confirmCancelText: { fontSize: 15, fontWeight: '600', color: colors.gray },
+  confirmSendBtn: { flex: 1, flexDirection: 'row', gap: 8, padding: 14, borderRadius: 12, backgroundColor: colors.admin, alignItems: 'center', justifyContent: 'center' },
+  confirmSendText: { fontSize: 15, fontWeight: '600', color: colors.white },
 });
