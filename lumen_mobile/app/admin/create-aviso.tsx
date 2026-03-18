@@ -84,6 +84,8 @@ export default function CreateAvisoScreen() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [sentCount, setSentCount] = useState(0);
   const [sendError, setSendError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -169,7 +171,7 @@ export default function CreateAvisoScreen() {
     setSendError(null);
     try {
       const filters = destMode === 'filter' ? buildFilters() : null;
-      await inboxService.send({
+      const response = await inboxService.send({
         title: title.trim(),
         message: message.trim(),
         type: messageType,
@@ -177,7 +179,8 @@ export default function CreateAvisoScreen() {
         scope_org_unit_id: destMode === 'scope' ? (selectedScope?.id ?? null) : null,
         filters,
       });
-      router.back();
+      setSentCount(response.recipient_count);
+      setShowSuccessModal(true);
     } catch (error: any) {
       const raw = error.response?.data?.detail;
       let msg = 'Nao foi possivel enviar o aviso';
@@ -479,6 +482,30 @@ export default function CreateAvisoScreen() {
         </View>
       </Modal>
 
+      {/* Modal de sucesso */}
+      <Modal visible={showSuccessModal} animationType="fade" transparent onRequestClose={() => { setShowSuccessModal(false); router.back(); }}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmBox}>
+            <View style={styles.successIconCircle}>
+              <Ionicons name="checkmark" size={40} color={colors.white} />
+            </View>
+            <Text style={styles.confirmTitle}>Aviso enviado!</Text>
+            <Text style={styles.confirmMessage}>
+              Seu aviso foi enviado para{' '}
+              <Text style={{ fontWeight: '700', color: '#171717' }}>{sentCount} membro(s)</Text>
+              {' '}com sucesso.
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmSendBtn, { width: '100%' }]}
+              onPress={() => { setShowSuccessModal(false); router.back(); }}
+            >
+              <Ionicons name="checkmark-circle" size={18} color={colors.white} />
+              <Text style={styles.confirmSendText}>Concluir</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Modal de seleção de filtros de perfil */}
       <Modal visible={showFilterModal} animationType="slide" transparent onRequestClose={() => setShowFilterModal(false)}>
         <View style={styles.modalOverlay}>
@@ -588,4 +615,5 @@ const styles = StyleSheet.create({
   confirmCancelText: { fontSize: 15, fontWeight: '600', color: colors.gray },
   confirmSendBtn: { flex: 1, flexDirection: 'row', gap: 8, padding: 14, borderRadius: 12, backgroundColor: colors.admin, alignItems: 'center', justifyContent: 'center' },
   confirmSendText: { fontSize: 15, fontWeight: '600', color: colors.white },
+  successIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.success, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
 });
