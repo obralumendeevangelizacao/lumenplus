@@ -155,7 +155,9 @@ export default function CreateAvisoScreen() {
     setValidationError(null);
     setSendError(null);
     if (!title.trim()) { setValidationError('Digite um titulo para o aviso'); return; }
+    if (title.trim().length < 3) { setValidationError('O titulo deve ter pelo menos 3 caracteres'); return; }
     if (!message.trim()) { setValidationError('Digite o texto do aviso'); return; }
+    if (message.trim().length < 10) { setValidationError('O texto do aviso deve ter pelo menos 10 caracteres'); return; }
     if (destMode === 'scope' && !selectedScope) { setValidationError('Selecione um setor ou grupo'); return; }
     if (destMode === 'filter' && !buildFilters()) { setValidationError('Selecione pelo menos um filtro'); return; }
     setShowConfirmModal(true);
@@ -177,8 +179,17 @@ export default function CreateAvisoScreen() {
       });
       router.back();
     } catch (error: any) {
-      const detail = error.response?.data?.detail?.message || error.response?.data?.detail || 'Nao foi possivel enviar o aviso';
-      setSendError(typeof detail === 'string' ? detail : 'Nao foi possivel enviar o aviso');
+      const raw = error.response?.data?.detail;
+      let msg = 'Nao foi possivel enviar o aviso';
+      if (typeof raw === 'string') {
+        msg = raw;
+      } else if (raw?.message) {
+        msg = raw.message;
+      } else if (Array.isArray(raw) && raw.length > 0) {
+        // Erro de validação Pydantic: [{ loc, msg, type }]
+        msg = raw[0].msg || msg;
+      }
+      setSendError(msg);
     } finally {
       setLoading(false);
     }
