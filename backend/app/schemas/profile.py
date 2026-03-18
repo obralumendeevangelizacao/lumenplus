@@ -87,6 +87,21 @@ class ProfileUpdateRequest(BaseSchema):
         return self
 
 
+class EmergencyContactRequest(BaseSchema):
+    """Adicionar contato de emergência."""
+    name: str = Field(..., min_length=2, max_length=200)
+    phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
+    relationship: str = Field(..., min_length=2, max_length=50)
+
+
+class EmergencyContactOut(BaseSchema):
+    """Contato de emergência."""
+    id: UUID
+    name: str
+    phone_e164: str
+    relationship: str
+
+
 class ProfileOut(BaseSchema):
     """Perfil do usuário (sem dados sensíveis)."""
     user_id: UUID
@@ -97,12 +112,12 @@ class ProfileOut(BaseSchema):
     phone_verified: bool = False
     city: Optional[str] = None
     state: Optional[str] = None
-    
+
     # Catálogos (IDs)
     life_state_item_id: Optional[UUID] = None
     marital_status_item_id: Optional[UUID] = None
     vocational_reality_item_id: Optional[UUID] = None
-    
+
     # Campos adicionais
     consecration_year: Optional[int] = None
     has_vocational_accompaniment: Optional[bool] = None
@@ -111,7 +126,7 @@ class ProfileOut(BaseSchema):
     interested_in_ministry: Optional[bool] = None
     interested_ministry_id: Optional[UUID] = None
     ministry_interest_notes: Optional[str] = None
-    
+
     # Informações adicionais
     instagram: Optional[str] = None
     dietary_restriction: Optional[bool] = None
@@ -124,7 +139,7 @@ class ProfileOut(BaseSchema):
     despertar_encounter: Optional[str] = None
 
     # Contatos de emergência
-    emergency_contacts: list["EmergencyContactOut"] = []
+    emergency_contacts: list[EmergencyContactOut] = []
 
     # Status
     status: str = "INCOMPLETE"
@@ -139,21 +154,6 @@ class ProfileWithLabelsOut(ProfileOut):
     vocational_reality_label: Optional[str] = None
     interested_ministry_name: Optional[str] = None
     vocational_accompanist_display_name: Optional[str] = None
-
-
-class EmergencyContactRequest(BaseSchema):
-    """Adicionar contato de emergência."""
-    name: str = Field(..., min_length=2, max_length=200)
-    phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
-    relationship: str = Field(..., min_length=2, max_length=50)
-
-
-class EmergencyContactOut(BaseSchema):
-    """Contato de emergência."""
-    id: UUID
-    name: str
-    phone_e164: str
-    relationship: str
 
 
 # =============================================================================
