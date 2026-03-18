@@ -97,6 +97,11 @@ class InboxSentMessageResponse(BaseModel):
     recipient_count: int
     read_count: int
     filters: dict[str, Any] | None = None
+    # Destino
+    sent_to_all: bool = False
+    target_org_unit_name: str | None = None
+    # Remetente
+    created_by_name: str | None = None
 
     class Config:
         from_attributes = True

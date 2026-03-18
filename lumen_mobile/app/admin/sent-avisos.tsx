@@ -39,6 +39,14 @@ interface SentAviso {
   expires_at: string;
   recipient_count: number;
   read_count: number;
+  filters: Record<string, string[]> | null;
+  sent_to_all: boolean;
+  target_org_unit_name: string | null;
+  created_by_name: string | null;
+}
+
+interface SentAvisosResponse {
+  messages: SentAviso[];
 }
 
 export default function SentAvisosScreen() {
@@ -52,8 +60,8 @@ export default function SentAvisosScreen() {
 
   const loadAvisos = async () => {
     try {
-      const response = await api.get('/inbox/sent');
-      setAvisos(response.data.messages || []);
+      const response = await api.get<SentAvisosResponse>('/inbox/sent');
+      setAvisos(response.messages || []);
     } catch (error) {
       console.log('Erro ao carregar avisos:', error);
     } finally {
@@ -67,12 +75,12 @@ export default function SentAvisosScreen() {
     setRefreshing(false);
   }, []);
 
-  const getTypeIcon = (type: string) => {
+  const getTypeConfig = (type: string) => {
     switch (type) {
-      case 'urgent': return { name: 'alert-circle', color: colors.error };
-      case 'warning': return { name: 'warning', color: colors.warning };
-      case 'success': return { name: 'checkmark-circle', color: colors.success };
-      default: return { name: 'information-circle', color: colors.info };
+      case 'urgent':  return { icon: 'alert-circle',        color: colors.error,   label: 'Urgente' };
+      case 'warning': return { icon: 'warning',             color: colors.warning, label: 'Atenção' };
+      case 'success': return { icon: 'checkmark-circle',    color: colors.success, label: 'Confirmação' };
+      default:        return { icon: 'information-circle',  color: colors.info,    label: 'Informativo' };
     }
   };
 
@@ -80,46 +88,109 @@ export default function SentAvisosScreen() {
     const date = new Date(dateStr);
     return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
-      month: 'short',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
     });
   };
 
+  const getDestinationLabel = (aviso: SentAviso): string => {
+    if (aviso.target_org_unit_name) return aviso.target_org_unit_name;
+    if (aviso.sent_to_all) return 'Todos os membros';
+    if (aviso.filters) {
+      const parts: string[] = [];
+      if (aviso.filters.vocational_reality_codes?.length) parts.push(`Vocação: ${aviso.filters.vocational_reality_codes.join(', ')}`);
+      if (aviso.filters.life_state_codes?.length) parts.push(`Estado de vida: ${aviso.filters.life_state_codes.join(', ')}`);
+      if (aviso.filters.marital_status_codes?.length) parts.push(`Estado civil: ${aviso.filters.marital_status_codes.join(', ')}`);
+      if (aviso.filters.states?.length) parts.push(`UF: ${aviso.filters.states.join(', ')}`);
+      if (aviso.filters.cities?.length) parts.push(`Cidade: ${aviso.filters.cities.join(', ')}`);
+      return parts.length > 0 ? parts.join(' • ') : 'Filtros personalizados';
+    }
+    return '—';
+  };
+
+  const getDestinationIcon = (aviso: SentAviso): string => {
+    if (aviso.target_org_unit_name) return 'business-outline';
+    if (aviso.sent_to_all) return 'globe-outline';
+    return 'filter-outline';
+  };
+
   const renderAviso = ({ item }: { item: SentAviso }) => {
-    const icon = getTypeIcon(item.type);
-    const readPercentage = item.recipient_count > 0 
-      ? Math.round((item.read_count / item.recipient_count) * 100) 
+    const typeConfig = getTypeConfig(item.type);
+    const readPercentage = item.recipient_count > 0
+      ? Math.round((item.read_count / item.recipient_count) * 100)
       : 0;
 
     return (
       <View style={styles.avisoCard}>
-        <View style={styles.avisoHeader}>
-          <View style={[styles.iconContainer, { backgroundColor: `${icon.color}15` }]}>
-            <Ionicons name={icon.name as any} size={24} color={icon.color} />
+        {/* Header: tipo + título + data/hora */}
+        <View style={styles.cardHeader}>
+          <View style={[styles.typeIconBadge, { backgroundColor: `${typeConfig.color}18` }]}>
+            <Ionicons name={typeConfig.icon as any} size={22} color={typeConfig.color} />
           </View>
-          <View style={styles.avisoInfo}>
+          <View style={styles.headerInfo}>
             <Text style={styles.avisoTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.avisoDate}>{formatDate(item.created_at)}</Text>
+            <View style={styles.dateRow}>
+              <Ionicons name="calendar-outline" size={12} color={colors.gray} />
+              <Text style={styles.dateMeta}>{formatDate(item.created_at)}</Text>
+              <Ionicons name="time-outline" size={12} color={colors.gray} style={{ marginLeft: 6 }} />
+              <Text style={styles.dateMeta}>{formatTime(item.created_at)}</Text>
+            </View>
+          </View>
+          <View style={[styles.typeBadge, { backgroundColor: `${typeConfig.color}18` }]}>
+            <Text style={[styles.typeBadgeText, { color: typeConfig.color }]}>{typeConfig.label}</Text>
           </View>
         </View>
-        
+
+        {/* Texto do aviso */}
         <Text style={styles.avisoMessage} numberOfLines={2}>{item.message}</Text>
-        
-        <View style={styles.statsContainer}>
+
+        {/* Divisor */}
+        <View style={styles.divider} />
+
+        {/* Detalhes: quem enviou, para quem */}
+        <View style={styles.detailsGrid}>
+          <View style={styles.detailRow}>
+            <Ionicons name="person-circle-outline" size={15} color={colors.admin} />
+            <Text style={styles.detailLabel}>Enviado por</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>
+              {item.created_by_name || 'Você'}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons name={getDestinationIcon(item) as any} size={15} color={colors.admin} />
+            <Text style={styles.detailLabel}>Para</Text>
+            <Text style={styles.detailValue} numberOfLines={2}>
+              {getDestinationLabel(item)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Divisor */}
+        <View style={styles.divider} />
+
+        {/* Stats de leitura */}
+        <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Ionicons name="people-outline" size={16} color={colors.gray} />
+            <Ionicons name="people-outline" size={14} color={colors.gray} />
             <Text style={styles.statText}>{item.recipient_count} destinatários</Text>
           </View>
           <View style={styles.stat}>
-            <Ionicons name="eye-outline" size={16} color={colors.gray} />
+            <Ionicons name="eye-outline" size={14} color={colors.gray} />
             <Text style={styles.statText}>{item.read_count} leram ({readPercentage}%)</Text>
           </View>
         </View>
 
-        {/* Progress bar */}
+        {/* Barra de leitura */}
         <View style={styles.progressContainer}>
-          <View style={[styles.progressBar, { width: `${readPercentage}%` }]} />
+          <View style={[styles.progressBar, { width: `${readPercentage}%` as any }]} />
         </View>
       </View>
     );
@@ -151,7 +222,7 @@ export default function SentAvisosScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Avisos Enviados' }} />
-      
+
       <FlatList
         data={avisos}
         renderItem={renderAviso}
@@ -168,107 +239,46 @@ export default function SentAvisosScreen() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.lightGray,
-  },
-  listContent: {
-    padding: 16,
-    flexGrow: 1,
-    backgroundColor: colors.lightGray,
-  },
-  separator: {
-    height: 12,
-  },
-  avisoCard: {
-    backgroundColor: colors.white,
-    borderRadius: 12,
-    padding: 16,
-  },
-  avisoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  avisoInfo: {
-    flex: 1,
-  },
-  avisoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#171717',
-  },
-  avisoDate: {
-    fontSize: 12,
-    color: colors.gray,
-    marginTop: 2,
-  },
-  avisoMessage: {
-    fontSize: 14,
-    color: colors.gray,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 8,
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-    color: colors.gray,
-  },
-  progressContainer: {
-    height: 4,
-    backgroundColor: '#e5e5e5',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: colors.success,
-    borderRadius: 2,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    marginTop: 60,
-  },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: `${colors.admin}15`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#171717',
-    marginBottom: 8,
-  },
-  emptyMessage: {
-    fontSize: 14,
-    color: colors.gray,
-    textAlign: 'center',
-  },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.lightGray },
+  listContent: { padding: 16, flexGrow: 1, backgroundColor: colors.lightGray },
+  separator: { height: 12 },
+
+  avisoCard: { backgroundColor: colors.white, borderRadius: 14, padding: 16 },
+
+  // Header
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  typeIconBadge: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerInfo: { flex: 1 },
+  avisoTitle: { fontSize: 15, fontWeight: '700', color: '#171717', marginBottom: 2 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dateMeta: { fontSize: 12, color: colors.gray },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  typeBadgeText: { fontSize: 11, fontWeight: '600' },
+
+  // Mensagem
+  avisoMessage: { fontSize: 13, color: colors.gray, lineHeight: 19, marginBottom: 12 },
+
+  // Divisor
+  divider: { height: 1, backgroundColor: '#f3f4f6', marginBottom: 10 },
+
+  // Detalhes
+  detailsGrid: { gap: 6, marginBottom: 10 },
+  detailRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  detailLabel: { fontSize: 12, color: colors.gray, minWidth: 72 },
+  detailValue: { flex: 1, fontSize: 12, color: '#171717', fontWeight: '500' },
+
+  // Stats
+  statsRow: { flexDirection: 'row', gap: 16, marginBottom: 8 },
+  stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statText: { fontSize: 12, color: colors.gray },
+
+  // Barra de progresso
+  progressContainer: { height: 4, backgroundColor: '#e5e5e5', borderRadius: 2, overflow: 'hidden' },
+  progressBar: { height: '100%', backgroundColor: colors.success, borderRadius: 2 },
+
+  // Empty state
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, marginTop: 60 },
+  emptyIconContainer: { width: 120, height: 120, borderRadius: 60, backgroundColor: `${colors.admin}15`, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: '#171717', marginBottom: 8 },
+  emptyMessage: { fontSize: 14, color: colors.gray, textAlign: 'center' },
 });
