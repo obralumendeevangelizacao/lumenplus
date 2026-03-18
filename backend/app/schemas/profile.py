@@ -46,6 +46,17 @@ class ProfileUpdateRequest(BaseSchema):
     interested_ministry_id: Optional[UUID] = None
     ministry_interest_notes: Optional[str] = Field(None, max_length=500)
 
+    # Informações adicionais
+    instagram: Optional[str] = Field(None, max_length=100)
+    dietary_restriction: Optional[bool] = None
+    dietary_restriction_notes: Optional[str] = Field(None, max_length=500)
+    health_insurance: Optional[bool] = None
+    health_insurance_name: Optional[str] = Field(None, max_length=200)
+    accommodation_preference: Optional[str] = Field(None, max_length=20)  # CAMA | REDE | COLCHAO_INFLAVEL
+    is_from_mission: Optional[bool] = None
+    mission_name: Optional[str] = Field(None, max_length=200)
+    despertar_encounter: Optional[str] = Field(None, max_length=100)
+
     @field_validator("cpf")
     @classmethod
     def clean_cpf(cls, v: str) -> str:
@@ -101,6 +112,20 @@ class ProfileOut(BaseSchema):
     interested_ministry_id: Optional[UUID] = None
     ministry_interest_notes: Optional[str] = None
     
+    # Informações adicionais
+    instagram: Optional[str] = None
+    dietary_restriction: Optional[bool] = None
+    dietary_restriction_notes: Optional[str] = None
+    health_insurance: Optional[bool] = None
+    health_insurance_name: Optional[str] = None
+    accommodation_preference: Optional[str] = None
+    is_from_mission: Optional[bool] = None
+    mission_name: Optional[str] = None
+    despertar_encounter: Optional[str] = None
+
+    # Contatos de emergência
+    emergency_contacts: list["EmergencyContactOut"] = []
+
     # Status
     status: str = "INCOMPLETE"
     completed_at: Optional[datetime] = None

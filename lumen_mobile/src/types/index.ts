@@ -59,6 +59,19 @@ export interface Profile {
   interested_in_ministry: boolean | null;
   interested_ministry_id: string | null;
   ministry_interest_notes: string | null;
+  // Informações adicionais
+  instagram: string | null;
+  dietary_restriction: boolean | null;
+  dietary_restriction_notes: string | null;
+  health_insurance: boolean | null;
+  health_insurance_name: string | null;
+  accommodation_preference: string | null;  // CAMA | REDE | COLCHAO_INFLAVEL
+  is_from_mission: boolean | null;
+  mission_name: string | null;
+  despertar_encounter: string | null;
+  // Contatos de emergência
+  emergency_contacts: EmergencyContact[];
+  // Status
   status: ProfileStatus;
   completed_at: string | null;
   has_documents: boolean;
@@ -91,6 +104,16 @@ export interface ProfileUpdateRequest {
   interested_in_ministry?: boolean | null;
   interested_ministry_id?: string | null;
   ministry_interest_notes?: string | null;
+  // Informações adicionais
+  instagram?: string | null;
+  dietary_restriction?: boolean | null;
+  dietary_restriction_notes?: string | null;
+  health_insurance?: boolean | null;
+  health_insurance_name?: string | null;
+  accommodation_preference?: string | null;
+  is_from_mission?: boolean | null;
+  mission_name?: string | null;
+  despertar_encounter?: string | null;
 }
 
 export interface EmergencyContact {
