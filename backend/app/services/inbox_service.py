@@ -482,11 +482,14 @@ class InboxService:
         """Retorna mensagens enviadas por um usuário."""
         messages = self.db.execute(
             select(InboxMessage)
-            .options(joinedload(InboxMessage.created_by), joinedload(InboxMessage.target_org_unit))
+            .options(
+                joinedload(InboxMessage.created_by).joinedload(User.profile),
+                joinedload(InboxMessage.target_org_unit),
+            )
             .where(InboxMessage.created_by_user_id == user_id)
             .order_by(InboxMessage.created_at.desc())
             .limit(limit)
-        ).scalars().all()
+        ).scalars().unique().all()
 
         result = []
         for msg in messages:
@@ -513,8 +516,9 @@ class InboxService:
             sent_to_all = not has_scope and not has_filters
             target_org_unit_name = msg.target_org_unit.name if has_scope and msg.target_org_unit else None
 
-            # Remetente
-            created_by_name = msg.created_by.full_name if msg.created_by else None
+            # Remetente (full_name está em UserProfile, não em User)
+            sender = msg.created_by
+            created_by_name = (sender.profile.full_name if sender and sender.profile and sender.profile.full_name else None)
 
             result.append({
                 "id": str(msg.id),
