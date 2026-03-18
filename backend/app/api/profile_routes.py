@@ -268,6 +268,17 @@ def _apply_profile_fields(
         profile.interested_ministry_id = None
         profile.ministry_interest_notes = None
 
+    # Informações adicionais
+    profile.instagram = body.instagram
+    profile.dietary_restriction = body.dietary_restriction
+    profile.dietary_restriction_notes = body.dietary_restriction_notes if body.dietary_restriction else None
+    profile.health_insurance = body.health_insurance
+    profile.health_insurance_name = body.health_insurance_name if body.health_insurance else None
+    profile.accommodation_preference = body.accommodation_preference
+    profile.is_from_mission = body.is_from_mission
+    profile.mission_name = body.mission_name if body.is_from_mission else None
+    profile.despertar_encounter = body.despertar_encounter
+
     if body.photo_url:
         profile.photo_url = body.photo_url
 
@@ -323,6 +334,15 @@ def _create_profile(
             body.ministry_interest_notes if body.interested_in_ministry else None
         ),
         photo_url=body.photo_url,
+        instagram=body.instagram,
+        dietary_restriction=body.dietary_restriction,
+        dietary_restriction_notes=body.dietary_restriction_notes if body.dietary_restriction else None,
+        health_insurance=body.health_insurance,
+        health_insurance_name=body.health_insurance_name if body.health_insurance else None,
+        accommodation_preference=body.accommodation_preference,
+        is_from_mission=body.is_from_mission,
+        mission_name=body.mission_name if body.is_from_mission else None,
+        despertar_encounter=body.despertar_encounter,
         status="COMPLETE" if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state]) else "INCOMPLETE",
         completed_at=datetime.now(timezone.utc) if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state]) else None,
     )
@@ -348,6 +368,17 @@ def _build_profile_response(profile: UserProfile, db: DBSession) -> ProfileWithL
         if ministry:
             ministry_name = ministry.name
 
+    # Contatos de emergência
+    emergency_contacts = [
+        EmergencyContactOut(
+            id=c.id,
+            name=c.contact_name,
+            phone_e164=c.contact_phone,
+            relationship=c.contact_relationship,
+        )
+        for c in profile.emergency_contacts
+    ]
+
     return ProfileWithLabelsOut(
         user_id=profile.user_id,
         full_name=profile.full_name,
@@ -367,6 +398,16 @@ def _build_profile_response(profile: UserProfile, db: DBSession) -> ProfileWithL
         interested_in_ministry=profile.interested_in_ministry,
         interested_ministry_id=profile.interested_ministry_id,
         ministry_interest_notes=profile.ministry_interest_notes,
+        instagram=profile.instagram,
+        dietary_restriction=profile.dietary_restriction,
+        dietary_restriction_notes=profile.dietary_restriction_notes,
+        health_insurance=profile.health_insurance,
+        health_insurance_name=profile.health_insurance_name,
+        accommodation_preference=profile.accommodation_preference,
+        is_from_mission=profile.is_from_mission,
+        mission_name=profile.mission_name,
+        despertar_encounter=profile.despertar_encounter,
+        emergency_contacts=emergency_contacts,
         status=profile.status,
         completed_at=profile.completed_at,
         has_documents=bool(profile.cpf_encrypted),

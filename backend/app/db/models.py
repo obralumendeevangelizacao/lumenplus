@@ -150,7 +150,18 @@ class UserProfile(Base):
     # Se sim, qual?
     interested_ministry_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("org_units.id", ondelete="SET NULL"), nullable=True)
     ministry_interest_notes: Mapped[str | None] = mapped_column(Text, nullable=True)  # Observações
-    
+
+    # INFORMAÇÕES ADICIONAIS (retiros, eventos, comunidade)
+    instagram: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dietary_restriction: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    dietary_restriction_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    health_insurance: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    health_insurance_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    accommodation_preference: Mapped[str | None] = mapped_column(String(20), nullable=True)  # CAMA, REDE, COLCHAO_INFLAVEL
+    is_from_mission: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    mission_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    despertar_encounter: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # STATUS
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="INCOMPLETE")
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
