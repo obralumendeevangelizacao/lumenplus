@@ -92,8 +92,8 @@ Em conformidade com a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — 
 
 1. CONTROLADOR DE DADOS
 Obra Lumen de Evangelização
-CNPJ: [INSERIR CNPJ]
-Endereço: [INSERIR ENDEREÇO COMPLETO]
+CNPJ: 19.614.384/0001-60
+Endereço: Rua Coronel Jucá, 2040, Meireles, Fortaleza/CE, 60170-320
 E-mail do Encarregado (DPO): privacidade@obralumen.org.br
 
 2. DADOS PESSOAIS COLETADOS
@@ -200,9 +200,9 @@ Não coletamos intencionalmente dados de menores de 18 anos sem consentimento do
 Alterações relevantes serão comunicadas pelo Aplicativo com antecedência mínima de 15 dias.
 
 13. ENCARREGADO DE PROTEÇÃO DE DADOS (DPO)
-Conforme o Art. 41 da LGPD, designamos um Encarregado pelo Tratamento de Dados:
-Nome: [INSERIR NOME DO DPO]
+Conforme o Art. 41 da LGPD, a Obra Lumen de Evangelização está em processo de designação formal do Encarregado pelo Tratamento de Dados. Enquanto isso, o canal de contato para exercício de direitos dos titulares é:
 E-mail: privacidade@obralumen.org.br
+Prazo de resposta: até 15 dias úteis.
 
 14. BASE TERRITORIAL
 O Lumen+ opera exclusivamente em território brasileiro. Os dados são armazenados em servidores localizados no Brasil ou em países com nível de proteção equivalente, conforme Art. 33 da LGPD.
@@ -216,3 +216,8 @@ E-mail: privacidade@obralumen.org.br
 # (substitui texto placeholder que pôde ter sido aceito antes da migration 009)
 TERMS_V1_1 = TERMS_V1.replace("Versão 1.0", "Versão 1.1")
 PRIVACY_V1_1 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.1")
+
+# v1.2 — textos definitivos com CNPJ, endereço e situação real do DPO preenchidos
+# (v1.0 e v1.1 tinham placeholders "[INSERIR ...]")
+TERMS_V1_2 = TERMS_V1.replace("Versão 1.0", "Versão 1.2")
+PRIVACY_V1_2 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.2")
