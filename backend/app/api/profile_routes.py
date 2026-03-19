@@ -241,9 +241,13 @@ def _apply_profile_fields(
     """Aplica campos do request no profile existente."""
     profile.full_name = body.full_name
     profile.birth_date = body.birth_date
-    profile.cpf_hash = cpf_hash
-    profile.cpf_encrypted = cpf_encrypted
-    profile.rg_encrypted = rg_encrypted
+    # Só sobrescreve CPF/RG se um novo valor foi enviado;
+    # caso contrário, mantém os dados criptografados existentes.
+    if body.cpf:
+        profile.cpf_hash = cpf_hash
+        profile.cpf_encrypted = cpf_encrypted
+    if body.rg:
+        profile.rg_encrypted = rg_encrypted
     profile.city = body.city
     profile.state = body.state
     profile.life_state_item_id = body.life_state_item_id

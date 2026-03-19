@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView,
-  ActivityIndicator, StatusBar, Modal, FlatList, Switch,
+  ActivityIndicator, StatusBar, Modal, FlatList, Switch, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -240,9 +240,15 @@ export default function RegisterScreen() {
             relationship: emergencyRelationship.trim() || 'Não informado',
           });
         }
-      } catch (profileErr) {
-        // Erro no perfil não impede o acesso ao app, mas logamos para debug
-        console.warn('[register] Erro ao salvar perfil:', profileErr);
+      } catch (profileErr: any) {
+        // Loga o erro completo para diagnóstico
+        console.error('[register] Erro ao salvar perfil:', JSON.stringify(profileErr?.response?.data ?? profileErr?.message ?? profileErr));
+        const detail = profileErr?.response?.data?.detail;
+        let msg = 'Seus dados básicos foram salvos, mas houve um erro ao salvar algumas informações do perfil. Você pode completar seu perfil depois.';
+        if (typeof detail === 'string') msg = detail;
+        else if (detail?.message) msg = `Erro: ${detail.message}`;
+        else if (Array.isArray(detail) && detail[0]?.msg) msg = `Dado inválido: ${detail[0].msg}`;
+        Alert.alert('Atenção', msg, [{ text: 'OK' }]);
       }
 
       router.replace('/(tabs)/home');
