@@ -9,7 +9,6 @@ mantendo compatibilidade com todos os módulos que fazem:
 """
 
 from datetime import datetime, timezone
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -17,9 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.db.models import (
-    User, UserIdentity, UserProfile, UserConsent,
-    OrgMembership, MembershipStatus, OrgInvite, InviteStatus,
-    UserGlobalRole, GlobalRole, LegalDocument,
+    User,
+    UserIdentity,
+    UserProfile,
+    UserConsent,
+    MembershipStatus,
+    OrgInvite,
+    InviteStatus,
+    LegalDocument,
 )
 from app.schemas.auth import (
     RegisterRequest,
@@ -43,6 +47,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ROUTES
 # =============================================================================
 
+
 @router.post("/register", response_model=AuthResponse)
 async def register(data: RegisterRequest, db: Session = Depends(get_db)):
     """Registra novo usuário (somente em modo DEV)."""
@@ -64,8 +69,7 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
     if existing:
         raise HTTPException(
-            status_code=400,
-            detail={"error": "email_exists", "message": "Email já cadastrado"}
+            status_code=400, detail={"error": "email_exists", "message": "Email já cadastrado"}
         )
 
     user = User()
@@ -117,7 +121,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not identity:
         raise HTTPException(
             status_code=401,
-            detail={"error": "invalid_credentials", "message": "Email ou senha inválidos"}
+            detail={"error": "invalid_credentials", "message": "Email ou senha inválidos"},
         )
 
     # TODO: Validar senha (quando implementar auth real com Firebase)
@@ -168,9 +172,7 @@ async def get_me(
     ).scalar_one_or_none()
 
     user_consent_doc_ids = set()
-    consents = db.execute(
-        select(UserConsent).where(UserConsent.user_id == user.id)
-    ).scalars().all()
+    consents = db.execute(select(UserConsent).where(UserConsent.user_id == user.id)).scalars().all()
     for c in consents:
         user_consent_doc_ids.add(c.document_id)
 
@@ -187,26 +189,31 @@ async def get_me(
     memberships = []
     for m in user.memberships:
         if m.status == MembershipStatus.ACTIVE:
-            memberships.append(MembershipOut(
-                id=m.id,
-                org_unit_id=m.org_unit_id,
-                org_unit_name=m.org_unit.name,
-                org_unit_type=m.org_unit.type.value,
-                role=m.role.value,
-                status=m.status.value,
-                joined_at=m.joined_at,
-            ))
+            memberships.append(
+                MembershipOut(
+                    id=m.id,
+                    org_unit_id=m.org_unit_id,
+                    org_unit_name=m.org_unit.name,
+                    org_unit_type=m.org_unit.type.value,
+                    role=m.role.value,
+                    status=m.status.value,
+                    joined_at=m.joined_at,
+                )
+            )
 
     # Pending invites (exclui expirados)
     pending_invites = []
     now = datetime.now(timezone.utc)
-    invites = db.execute(
-        select(OrgInvite)
-        .where(
-            OrgInvite.invited_user_id == user.id,
-            OrgInvite.status == InviteStatus.PENDING,
+    invites = (
+        db.execute(
+            select(OrgInvite).where(
+                OrgInvite.invited_user_id == user.id,
+                OrgInvite.status == InviteStatus.PENDING,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for inv in invites:
         # Filtra expirados sem alterar status (a expiração formal ocorre no respond_to_invite)
@@ -218,18 +225,20 @@ async def get_me(
         if invited_by and invited_by.profile:
             invited_by_name = invited_by.profile.full_name or "Usuário"
 
-        pending_invites.append(InviteOut(
-            id=inv.id,
-            org_unit_id=inv.org_unit_id,
-            org_unit_name=inv.org_unit.name,
-            org_unit_type=inv.org_unit.type.value,
-            role=inv.role.value,
-            status=inv.status.value,
-            message=inv.message,
-            invited_by_name=invited_by_name,
-            created_at=inv.created_at,
-            expires_at=inv.expires_at,
-        ))
+        pending_invites.append(
+            InviteOut(
+                id=inv.id,
+                org_unit_id=inv.org_unit_id,
+                org_unit_name=inv.org_unit.name,
+                org_unit_type=inv.org_unit.type.value,
+                role=inv.role.value,
+                status=inv.status.value,
+                message=inv.message,
+                invited_by_name=invited_by_name,
+                created_at=inv.created_at,
+                expires_at=inv.expires_at,
+            )
+        )
 
     # Global roles
     global_roles = [ugr.global_role.code for ugr in user.global_roles]

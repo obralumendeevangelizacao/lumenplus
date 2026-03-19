@@ -58,9 +58,7 @@ class CryptoService:
                 "ENCRYPTION_KEY", settings.encryption_key
             )
         if settings.hmac_pepper:
-            self._hmac_pepper = self._decode_and_validate_key(
-                "HMAC_PEPPER", settings.hmac_pepper
-            )
+            self._hmac_pepper = self._decode_and_validate_key("HMAC_PEPPER", settings.hmac_pepper)
 
         # DEV: gera chaves efêmeras se não configuradas, com aviso explícito
         if settings.is_dev:
@@ -91,7 +89,7 @@ class CryptoService:
                 raise CryptoConfigError(
                     f"Variáveis obrigatórias em PROD não configuradas: {', '.join(missing)}. "
                     "Gere as chaves com: "
-                    "python -c \"import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+                    'python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"'
                 )
 
     # =========================================================================
@@ -174,7 +172,7 @@ class CryptoService:
             raise CryptoConfigError(
                 f"{name} contém valor base64 inválido: {exc}. "
                 "Gere uma chave válida com: "
-                "python -c \"import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+                'python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"'
             ) from exc
 
         if len(key) != _REQUIRED_KEY_BYTES:
@@ -182,7 +180,7 @@ class CryptoService:
                 f"{name} deve ter exatamente {_REQUIRED_KEY_BYTES} bytes após decodificação base64, "
                 f"mas tem {len(key)} bytes. "
                 "Gere uma chave correta com: "
-                "python -c \"import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())\""
+                'python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"'
             )
         return key
 

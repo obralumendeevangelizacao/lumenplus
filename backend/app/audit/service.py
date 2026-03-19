@@ -12,10 +12,10 @@ logger = structlog.get_logger()
 
 # Padrões para sanitização de dados sensíveis nos logs/auditoria
 _SENSITIVE_PATTERNS = [
-    (r"\d{3}\.\d{3}\.\d{3}-\d{2}", "[CPF_REDACTED]"),   # CPF formatado
-    (r"\d{11}", "[CPF_REDACTED]"),                         # CPF sem formatação
-    (r"\+\d{10,15}", "[PHONE_REDACTED]"),                  # Telefone E.164
-    (r"\d{2}\.\d{3}\.\d{3}-[\dXx]", "[RG_REDACTED]"),    # RG formatado
+    (r"\+\d{10,15}", "[PHONE_REDACTED]"),  # Telefone E.164 — deve vir antes de \d{11}
+    (r"\d{3}\.\d{3}\.\d{3}-\d{2}", "[CPF_REDACTED]"),  # CPF formatado
+    (r"(?<!\d)\d{11}(?!\d)", "[CPF_REDACTED]"),  # CPF sem formatação (exatamente 11 dígitos)
+    (r"\d{2}\.\d{3}\.\d{3}-[\dXx]", "[RG_REDACTED]"),  # RG formatado
 ]
 
 
@@ -30,7 +30,9 @@ def sanitize_sensitive_data(data: Any) -> Any:
         return result
     if isinstance(data, dict):
         return {
-            k: "[REDACTED]" if k.lower() in ("cpf", "rg", "phone", "phone_e164", "telefone", "documento") else sanitize_sensitive_data(v)
+            k: "[REDACTED]"
+            if k.lower() in ("cpf", "rg", "phone", "phone_e164", "telefone", "documento")
+            else sanitize_sensitive_data(v)
             for k, v in data.items()
         }
     if isinstance(data, list):

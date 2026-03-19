@@ -5,14 +5,13 @@ Fixtures e configurações para pytest.
 """
 
 import os
+import tempfile
 from typing import Generator
-from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
 # Configura ambiente de teste ANTES de importar app
 os.environ["ENVIRONMENT"] = "test"
@@ -20,11 +19,12 @@ os.environ["AUTH_MODE"] = "DEV"
 os.environ["ENABLE_DEV_ENDPOINTS"] = "true"
 os.environ["DEBUG_VERIFICATION_CODE"] = "true"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["ENCRYPTION_KEY"] = "dGVzdC1lbmNyeXB0aW9uLWtleS0zMi1ieXRlcyE="  # 32 bytes base64
-os.environ["HMAC_PEPPER"] = "dGVzdC1obWFjLXBlcHBlci0zMi1ieXRlcyEh"  # 32 bytes base64
+os.environ["ENCRYPTION_KEY"] = "mpmaPE3k4WEOi1s3ICSai0dOBj04mnkwFXO+Isksys8="  # 32 bytes base64
+os.environ["HMAC_PEPPER"] = "WWtxHP65cwXkDDXNsKILWTuA4LQNmrRaICQ3rgNsjfE="  # 32 bytes base64
 
+from app.api.deps import get_db as deps_get_db
 from app.db.models import Base
-from app.db.session import get_db
+from app.db.session import get_db as session_get_db
 from app.main import app
 
 
@@ -33,15 +33,17 @@ from app.main import app
 # =============================================================================
 @pytest.fixture(scope="function")
 def db_engine():
-    """Cria engine de teste em memória."""
+    """Cria engine de teste com SQLite em arquivo temporário (thread-safe)."""
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
     engine = create_engine(
-        "sqlite:///:memory:",
+        f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
     Base.metadata.create_all(bind=engine)
     yield engine
-    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    os.unlink(db_path)
 
 
 @pytest.fixture(scope="function")
@@ -56,19 +58,23 @@ def db_session(db_engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
-def client(db_session: Session) -> Generator[TestClient, None, None]:
+def client(db_engine) -> Generator[TestClient, None, None]:
     """Cliente de teste com banco isolado."""
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+
     def override_get_db():
+        db = TestingSessionLocal()
         try:
-            yield db_session
+            yield db
         finally:
-            pass
-    
-    app.dependency_overrides[get_db] = override_get_db
-    
+            db.close()
+
+    app.dependency_overrides[deps_get_db] = override_get_db
+    app.dependency_overrides[session_get_db] = override_get_db
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     app.dependency_overrides.clear()
 
 

@@ -25,7 +25,10 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Cria o tipo enum para inbox_message_type
     inbox_message_type = postgresql.ENUM(
-        "info", "warning", "success", "urgent",
+        "info",
+        "warning",
+        "success",
+        "urgent",
         name="inbox_message_type",
         create_type=False,
     )
@@ -45,7 +48,10 @@ def upgrade() -> None:
         sa.Column(
             "type",
             sa.Enum(
-                "info", "warning", "success", "urgent",
+                "info",
+                "warning",
+                "success",
+                "urgent",
                 name="inbox_message_type",
                 create_constraint=False,
                 native_enum=False,

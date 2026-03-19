@@ -53,6 +53,7 @@ def _hash_code(code: str) -> str:
 # INICIAR VERIFICACAO
 # =============================================================================
 
+
 @router.post("/phone/start", response_model=StartVerificationResponse)
 async def start_phone_verification(
     request: Request,
@@ -69,7 +70,10 @@ async def start_phone_verification(
     if not settings.enable_phone_verification:
         raise HTTPException(
             status_code=503,
-            detail={"error": "service_unavailable", "message": "Verificacao de telefone desabilitada"},
+            detail={
+                "error": "service_unavailable",
+                "message": "Verificacao de telefone desabilitada",
+            },
         )
 
     # Rate limit por usuario
@@ -85,7 +89,10 @@ async def start_phone_verification(
     if recent_count >= settings.rate_limit_verification_per_hour:
         raise HTTPException(
             status_code=429,
-            detail={"error": "rate_limit", "message": "Muitas tentativas. Aguarde antes de tentar novamente."},
+            detail={
+                "error": "rate_limit",
+                "message": "Muitas tentativas. Aguarde antes de tentar novamente.",
+            },
         )
 
     # Verifica / inicializa telefone no perfil
@@ -96,7 +103,10 @@ async def start_phone_verification(
     if profile and profile.phone_e164 and profile.phone_e164 != body.phone_e164:
         raise HTTPException(
             status_code=400,
-            detail={"error": "bad_request", "message": "Telefone nao corresponde ao perfil cadastrado"},
+            detail={
+                "error": "bad_request",
+                "message": "Telefone nao corresponde ao perfil cadastrado",
+            },
         )
     elif not profile:
         # Primeiro acesso: cria perfil com o telefone informado
@@ -120,7 +130,9 @@ async def start_phone_verification(
     db.add(verification)
 
     # Envia notificacao
-    message = f"Seu codigo de verificacao Lumen+ e: {code}. Valido por {CODE_EXPIRY_MINUTES} minutos."
+    message = (
+        f"Seu codigo de verificacao Lumen+ e: {code}. Valido por {CODE_EXPIRY_MINUTES} minutos."
+    )
     try:
         if body.channel == "SMS":
             notification_provider.send_sms(body.phone_e164, message)
@@ -131,7 +143,10 @@ async def start_phone_verification(
             db.rollback()
             raise HTTPException(
                 status_code=503,
-                detail={"error": "service_unavailable", "message": "Servico de notificacao indisponivel"},
+                detail={
+                    "error": "service_unavailable",
+                    "message": "Servico de notificacao indisponivel",
+                },
             )
 
     # Em DEV com mock provider: salva codigo para testes
@@ -164,6 +179,7 @@ async def start_phone_verification(
 # =============================================================================
 # CONFIRMAR CODIGO
 # =============================================================================
+
 
 @router.post("/phone/confirm", response_model=ConfirmVerificationResponse)
 async def confirm_phone_verification(
@@ -217,7 +233,10 @@ async def confirm_phone_verification(
         remaining = MAX_ATTEMPTS - verification.attempts
         raise HTTPException(
             status_code=400,
-            detail={"error": "invalid_code", "message": f"Codigo invalido. {remaining} tentativa(s) restante(s)"},
+            detail={
+                "error": "invalid_code",
+                "message": f"Codigo invalido. {remaining} tentativa(s) restante(s)",
+            },
         )
 
     verification.verified_at = datetime.now(timezone.utc)
@@ -265,7 +284,10 @@ async def start_email_verification(
     if not settings.enable_email_verification:
         raise HTTPException(
             status_code=503,
-            detail={"error": "service_unavailable", "message": "Verificacao de e-mail desabilitada"},
+            detail={
+                "error": "service_unavailable",
+                "message": "Verificacao de e-mail desabilitada",
+            },
         )
 
     # Valida que o e-mail pertence a uma identidade do usuario

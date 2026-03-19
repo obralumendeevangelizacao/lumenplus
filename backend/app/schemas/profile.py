@@ -13,9 +13,10 @@ from app.schemas.base import BaseSchema
 # PROFILE
 # =============================================================================
 
+
 class ProfileUpdateRequest(BaseSchema):
     """Atualização de perfil completa."""
-    
+
     # Dados básicos
     full_name: str = Field(..., min_length=2, max_length=200)
     birth_date: date
@@ -32,15 +33,15 @@ class ProfileUpdateRequest(BaseSchema):
     life_state_item_id: Optional[UUID] = None
     marital_status_item_id: Optional[UUID] = None
     vocational_reality_item_id: Optional[UUID] = None
-    
+
     # Ano de consagração (obrigatório se CONSAGRADO_FILHO_DA_LUZ)
     consecration_year: Optional[int] = Field(None, ge=1900, le=2100)
-    
+
     # Acompanhamento Vocacional
     has_vocational_accompaniment: Optional[bool] = None
     vocational_accompanist_user_id: Optional[UUID] = None
     vocational_accompanist_name: Optional[str] = Field(None, max_length=200)
-    
+
     # Interesse em Ministério
     interested_in_ministry: Optional[bool] = None
     interested_ministry_id: Optional[UUID] = None
@@ -52,7 +53,9 @@ class ProfileUpdateRequest(BaseSchema):
     dietary_restriction_notes: Optional[str] = Field(None, max_length=500)
     health_insurance: Optional[bool] = None
     health_insurance_name: Optional[str] = Field(None, max_length=200)
-    accommodation_preference: Optional[str] = Field(None, max_length=20)  # CAMA | REDE | COLCHAO_INFLAVEL
+    accommodation_preference: Optional[str] = Field(
+        None, max_length=20
+    )  # CAMA | REDE | COLCHAO_INFLAVEL
     is_from_mission: Optional[bool] = None
     mission_name: Optional[str] = Field(None, max_length=200)
     despertar_encounter: Optional[str] = Field(None, max_length=100)
@@ -66,29 +69,26 @@ class ProfileUpdateRequest(BaseSchema):
     @classmethod
     def uppercase_state(cls, v: str) -> str:
         return v.upper()
-    
+
     @model_validator(mode="after")
     def validate_conditional_fields(self):
         """Valida campos condicionais."""
         # Se tem acompanhamento, deve informar quem
         if self.has_vocational_accompaniment:
             if not self.vocational_accompanist_user_id and not self.vocational_accompanist_name:
-                raise ValueError(
-                    "Se faz acompanhamento vocacional, informe quem é o acompanhador"
-                )
-        
+                raise ValueError("Se faz acompanhamento vocacional, informe quem é o acompanhador")
+
         # Se tem interesse em ministério, deve informar qual
         if self.interested_in_ministry:
             if not self.interested_ministry_id and not self.ministry_interest_notes:
-                raise ValueError(
-                    "Se tem interesse em ministério, informe qual ou descreva"
-                )
-        
+                raise ValueError("Se tem interesse em ministério, informe qual ou descreva")
+
         return self
 
 
 class EmergencyContactRequest(BaseSchema):
     """Adicionar contato de emergência."""
+
     name: str = Field(..., min_length=2, max_length=200)
     phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
     relationship: str = Field(..., min_length=2, max_length=50)
@@ -96,6 +96,7 @@ class EmergencyContactRequest(BaseSchema):
 
 class EmergencyContactOut(BaseSchema):
     """Contato de emergência."""
+
     id: UUID
     name: str
     phone_e164: str
@@ -104,6 +105,7 @@ class EmergencyContactOut(BaseSchema):
 
 class ProfileOut(BaseSchema):
     """Perfil do usuário (sem dados sensíveis)."""
+
     user_id: UUID
     full_name: Optional[str] = None
     birth_date: Optional[date] = None
@@ -149,6 +151,7 @@ class ProfileOut(BaseSchema):
 
 class ProfileWithLabelsOut(ProfileOut):
     """Perfil com labels dos catálogos (para exibição)."""
+
     life_state_label: Optional[str] = None
     marital_status_label: Optional[str] = None
     vocational_reality_label: Optional[str] = None
@@ -160,8 +163,10 @@ class ProfileWithLabelsOut(ProfileOut):
 # CATALOGS
 # =============================================================================
 
+
 class CatalogItemOut(BaseSchema):
     """Item de catálogo."""
+
     id: UUID
     code: str
     label: str
@@ -170,6 +175,7 @@ class CatalogItemOut(BaseSchema):
 
 class CatalogOut(BaseSchema):
     """Catálogo."""
+
     code: str
     name: str
     items: list[CatalogItemOut]
@@ -179,14 +185,17 @@ class CatalogOut(BaseSchema):
 # VERIFICATION - PHONE
 # =============================================================================
 
+
 class StartPhoneVerificationRequest(BaseSchema):
     """Iniciar verificação de telefone."""
+
     phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
     channel: str = Field(default="WHATSAPP")  # SMS | WHATSAPP
 
 
 class StartPhoneVerificationResponse(BaseSchema):
     """Resposta de início de verificação."""
+
     verification_id: UUID
     expires_at: datetime
     debug_code: Optional[str] = None  # Só em dev
@@ -194,12 +203,14 @@ class StartPhoneVerificationResponse(BaseSchema):
 
 class ConfirmPhoneVerificationRequest(BaseSchema):
     """Confirmar verificação de telefone."""
+
     verification_id: UUID
     code: str = Field(..., min_length=6, max_length=6)
 
 
 class PhoneVerificationResponse(BaseSchema):
     """Resposta de verificação de telefone."""
+
     verified: bool
     message: str
 
@@ -208,13 +219,16 @@ class PhoneVerificationResponse(BaseSchema):
 # VERIFICATION - EMAIL
 # =============================================================================
 
+
 class StartEmailVerificationRequest(BaseSchema):
     """Iniciar verificação de email."""
+
     email: str = Field(..., pattern=r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
 
 class StartEmailVerificationResponse(BaseSchema):
     """Resposta de início de verificação de email."""
+
     verification_id: UUID
     expires_at: datetime
     debug_token: Optional[str] = None  # Só em dev
@@ -222,11 +236,13 @@ class StartEmailVerificationResponse(BaseSchema):
 
 class ConfirmEmailVerificationRequest(BaseSchema):
     """Confirmar verificação de email via token."""
+
     token: str = Field(..., min_length=32, max_length=128)
 
 
 class EmailVerificationResponse(BaseSchema):
     """Resposta de verificação de email."""
+
     verified: bool
     message: str
 
@@ -235,8 +251,10 @@ class EmailVerificationResponse(BaseSchema):
 # PHOTO UPLOAD
 # =============================================================================
 
+
 class PhotoUploadResponse(BaseSchema):
     """Resposta de upload de foto."""
+
     photo_url: str
     message: str
 
