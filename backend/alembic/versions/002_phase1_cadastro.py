@@ -188,7 +188,10 @@ def upgrade() -> None:
     )
 
     # Add email_verified to identities
-    op.add_column("user_identities", sa.Column("email_verified", sa.Boolean(), server_default=sa.text("false")))
+    op.add_column(
+        "user_identities",
+        sa.Column("email_verified", sa.Boolean(), server_default=sa.text("false")),
+    )
 
 
 def downgrade() -> None:

@@ -11,20 +11,32 @@ def get_org_tree(db: Session) -> dict[str, list[dict[str, Any]]]:
     Returns the organizational tree with sectors containing their ministries,
     and groups listed separately.
     """
-    sectors = db.query(OrgUnit).filter(
-        OrgUnit.type == OrgUnitType.SECTOR,
-        OrgUnit.is_active == True,  # noqa: E712
-    ).all()
+    sectors = (
+        db.query(OrgUnit)
+        .filter(
+            OrgUnit.type == OrgUnitType.SETOR,
+            OrgUnit.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
 
-    groups = db.query(OrgUnit).filter(
-        OrgUnit.type == OrgUnitType.GROUP,
-        OrgUnit.is_active == True,  # noqa: E712
-    ).all()
+    groups = (
+        db.query(OrgUnit)
+        .filter(
+            OrgUnit.type == OrgUnitType.GRUPO,
+            OrgUnit.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
 
-    ministries = db.query(OrgUnit).filter(
-        OrgUnit.type == OrgUnitType.MINISTRY,
-        OrgUnit.is_active == True,  # noqa: E712
-    ).all()
+    ministries = (
+        db.query(OrgUnit)
+        .filter(
+            OrgUnit.type == OrgUnitType.MINISTERIO,
+            OrgUnit.is_active == True,  # noqa: E712
+        )
+        .all()
+    )
 
     ministry_by_parent: dict[UUID, list[OrgUnit]] = {}
     for m in ministries:
@@ -34,20 +46,18 @@ def get_org_tree(db: Session) -> dict[str, list[dict[str, Any]]]:
     result_sectors = []
     for sector in sectors:
         sector_ministries = ministry_by_parent.get(sector.id, [])
-        result_sectors.append({
-            "id": sector.id,
-            "name": sector.name,
-            "slug": sector.slug,
-            "ministries": [
-                {"id": m.id, "name": m.name, "slug": m.slug}
-                for m in sector_ministries
-            ],
-        })
+        result_sectors.append(
+            {
+                "id": sector.id,
+                "name": sector.name,
+                "slug": sector.slug,
+                "ministries": [
+                    {"id": m.id, "name": m.name, "slug": m.slug} for m in sector_ministries
+                ],
+            }
+        )
 
-    result_groups = [
-        {"id": g.id, "name": g.name, "slug": g.slug}
-        for g in groups
-    ]
+    result_groups = [{"id": g.id, "name": g.name, "slug": g.slug} for g in groups]
 
     return {
         "sectors": result_sectors,
@@ -63,10 +73,14 @@ def expand_org_units_for_user(db: Session, user_id: UUID) -> set[UUID]:
     This implements the inheritance rule:
     - If user is member of a MINISTRY, they also inherit visibility to its parent SECTOR.
     """
-    active_memberships = db.query(OrgMembership).filter(
-        OrgMembership.user_id == user_id,
-        OrgMembership.status == MembershipStatus.ACTIVE,
-    ).all()
+    active_memberships = (
+        db.query(OrgMembership)
+        .filter(
+            OrgMembership.user_id == user_id,
+            OrgMembership.status == MembershipStatus.ACTIVE,
+        )
+        .all()
+    )
 
     direct_ids = {m.org_unit_id for m in active_memberships}
 

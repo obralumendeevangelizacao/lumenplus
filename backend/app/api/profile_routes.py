@@ -39,6 +39,7 @@ router = APIRouter(prefix="/profile", tags=["Profile"])
 # CATALOGOS
 # =============================================================================
 
+
 @router.get("/catalogs", response_model=list[CatalogOut])
 async def get_catalogs(db: DBSession) -> list[CatalogOut]:
     """Retorna catálogos de perfil com itens ativos, ordenados."""
@@ -49,30 +50,33 @@ async def get_catalogs(db: DBSession) -> list[CatalogOut]:
             db.query(ProfileCatalogItem)
             .filter(
                 ProfileCatalogItem.catalog_id == catalog.id,
-                ProfileCatalogItem.is_active == True,
+                ProfileCatalogItem.is_active,
             )
             .order_by(ProfileCatalogItem.sort_order)
             .all()
         )
-        result.append(CatalogOut(
-            code=catalog.code,
-            name=catalog.name,
-            items=[
-                CatalogItemOut(
-                    id=item.id,
-                    code=item.code,
-                    label=item.label,
-                    sort_order=item.sort_order,
-                )
-                for item in items
-            ],
-        ))
+        result.append(
+            CatalogOut(
+                code=catalog.code,
+                name=catalog.name,
+                items=[
+                    CatalogItemOut(
+                        id=item.id,
+                        code=item.code,
+                        label=item.label,
+                        sort_order=item.sort_order,
+                    )
+                    for item in items
+                ],
+            )
+        )
     return result
 
 
 # =============================================================================
 # PERFIL
 # =============================================================================
+
 
 @router.get("", response_model=ProfileWithLabelsOut)
 async def get_profile(current_user: CurrentUser, db: DBSession) -> ProfileWithLabelsOut:
@@ -99,7 +103,10 @@ async def update_profile(
         if not crypto_service.is_configured:
             raise HTTPException(
                 status_code=503,
-                detail={"error": "service_unavailable", "message": "Serviço de criptografia não configurado. CPF/RG não podem ser salvos."},
+                detail={
+                    "error": "service_unavailable",
+                    "message": "Serviço de criptografia não configurado. CPF/RG não podem ser salvos.",
+                },
             )
         try:
             if body.cpf:
@@ -161,6 +168,7 @@ async def update_profile(
 # CONTATOS DE EMERGENCIA
 # =============================================================================
 
+
 @router.post("/emergency-contact", response_model=EmergencyContactOut, status_code=201)
 async def create_emergency_contact(
     body: EmergencyContactRequest,
@@ -172,7 +180,10 @@ async def create_emergency_contact(
     if not profile:
         raise HTTPException(
             status_code=400,
-            detail={"error": "bad_request", "message": "Complete seu perfil antes de adicionar contatos de emergência"},
+            detail={
+                "error": "bad_request",
+                "message": "Complete seu perfil antes de adicionar contatos de emergência",
+            },
         )
 
     existing = (
@@ -231,6 +242,7 @@ async def list_emergency_contacts(
 # HELPERS INTERNOS
 # =============================================================================
 
+
 def _apply_profile_fields(
     profile: UserProfile,
     body: ProfileUpdateRequest,
@@ -275,7 +287,9 @@ def _apply_profile_fields(
     # Informações adicionais
     profile.instagram = body.instagram
     profile.dietary_restriction = body.dietary_restriction
-    profile.dietary_restriction_notes = body.dietary_restriction_notes if body.dietary_restriction else None
+    profile.dietary_restriction_notes = (
+        body.dietary_restriction_notes if body.dietary_restriction else None
+    )
     profile.health_insurance = body.health_insurance
     profile.health_insurance_name = body.health_insurance_name if body.health_insurance else None
     profile.accommodation_preference = body.accommodation_preference
@@ -291,7 +305,13 @@ def _apply_profile_fields(
         profile.phone_e164 = body.phone_e164
 
     # Determina status: COMPLETE se os campos obrigatórios estão preenchidos
-    required = [profile.full_name, profile.birth_date, profile.phone_e164, profile.city, profile.state]
+    required = [
+        profile.full_name,
+        profile.birth_date,
+        profile.phone_e164,
+        profile.city,
+        profile.state,
+    ]
     if all(required):
         profile.status = "COMPLETE"
         if not profile.completed_at:
@@ -340,15 +360,21 @@ def _create_profile(
         photo_url=body.photo_url,
         instagram=body.instagram,
         dietary_restriction=body.dietary_restriction,
-        dietary_restriction_notes=body.dietary_restriction_notes if body.dietary_restriction else None,
+        dietary_restriction_notes=body.dietary_restriction_notes
+        if body.dietary_restriction
+        else None,
         health_insurance=body.health_insurance,
         health_insurance_name=body.health_insurance_name if body.health_insurance else None,
         accommodation_preference=body.accommodation_preference,
         is_from_mission=body.is_from_mission,
         mission_name=body.mission_name if body.is_from_mission else None,
         despertar_encounter=body.despertar_encounter,
-        status="COMPLETE" if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state]) else "INCOMPLETE",
-        completed_at=datetime.now(timezone.utc) if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state]) else None,
+        status="COMPLETE"
+        if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state])
+        else "INCOMPLETE",
+        completed_at=datetime.now(timezone.utc)
+        if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state])
+        else None,
     )
 
 

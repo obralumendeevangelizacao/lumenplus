@@ -45,7 +45,10 @@ async def get_current_user(
     if not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "unauthorized", "message": "Formato de autorização inválido. Use: Bearer <token>"},
+            detail={
+                "error": "unauthorized",
+                "message": "Formato de autorização inválido. Use: Bearer <token>",
+            },
         )
 
     token = authorization[7:]
@@ -85,11 +88,7 @@ def _provision_user(db: Session, payload: TokenPayload, request: Request) -> Use
 
     # 2. Fallback DEV: lookup por email (compatibilidade com identidades criadas via /auth/register)
     if identity is None and payload.email:
-        identity = (
-            db.query(UserIdentity)
-            .filter(UserIdentity.email == payload.email)
-            .first()
-        )
+        identity = db.query(UserIdentity).filter(UserIdentity.email == payload.email).first()
 
     if identity is not None:
         if identity.user and not identity.user.is_active:

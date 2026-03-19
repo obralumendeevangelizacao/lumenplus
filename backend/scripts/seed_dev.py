@@ -1,11 +1,12 @@
 """Seed de dados base para ambiente DEV. Idempotente."""
-import sys, os
+
+import sys
+import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.db.session import SessionLocal
-from app.db.models import (
-    GlobalRole, LegalDocument, ProfileCatalog, ProfileCatalogItem
-)
+from app.db.models import GlobalRole, LegalDocument, ProfileCatalog, ProfileCatalogItem
 from sqlalchemy import select
 
 db = SessionLocal()
@@ -32,18 +33,47 @@ try:
             counts["docs"] += 1
 
     catalogs_seed = [
-        ("LIFE_STATE", "Estado de Vida", [
-            "Leigo", "Leigo Consagrado", "Novica", "Seminarista", "Religioso",
-            "Diacono Permanente", "Diacono", "Sacerdote Religioso", "Sacerdote Diocesano", "Bispo",
-        ]),
-        ("MARITAL_STATUS", "Estado Civil", [
-            "Solteiro", "Noivo", "Casado", "Divorciado", "Viuvo", "Uniao Estavel",
-        ]),
-        ("VOCATIONAL_REALITY", "Realidade Vocacional", [
-            "Membro do Acolhida", "Membro do Aprofundamento", "Vocacional",
-            "Postulante de Primeiro Ano", "Postulante de Segundo Ano",
-            "Discipulo Vocacional", "Consagrado Filho da Luz",
-        ]),
+        (
+            "LIFE_STATE",
+            "Estado de Vida",
+            [
+                "Leigo",
+                "Leigo Consagrado",
+                "Novica",
+                "Seminarista",
+                "Religioso",
+                "Diacono Permanente",
+                "Diacono",
+                "Sacerdote Religioso",
+                "Sacerdote Diocesano",
+                "Bispo",
+            ],
+        ),
+        (
+            "MARITAL_STATUS",
+            "Estado Civil",
+            [
+                "Solteiro",
+                "Noivo",
+                "Casado",
+                "Divorciado",
+                "Viuvo",
+                "Uniao Estavel",
+            ],
+        ),
+        (
+            "VOCATIONAL_REALITY",
+            "Realidade Vocacional",
+            [
+                "Membro do Acolhida",
+                "Membro do Aprofundamento",
+                "Vocacional",
+                "Postulante de Primeiro Ano",
+                "Postulante de Segundo Ano",
+                "Discipulo Vocacional",
+                "Consagrado Filho da Luz",
+            ],
+        ),
     ]
     existing = {c.code for c in db.execute(select(ProfileCatalog)).scalars().all()}
     for code, name, items in catalogs_seed:
@@ -53,15 +83,19 @@ try:
             db.flush()
             counts["catalogs"] += 1
             for i, lbl in enumerate(items):
-                db.add(ProfileCatalogItem(
-                    catalog_id=cat.id,
-                    code=lbl.upper().replace(" ", "_")[:50],
-                    label=lbl,
-                    sort_order=i,
-                ))
+                db.add(
+                    ProfileCatalogItem(
+                        catalog_id=cat.id,
+                        code=lbl.upper().replace(" ", "_")[:50],
+                        label=lbl,
+                        sort_order=i,
+                    )
+                )
                 counts["items"] += 1
 
     db.commit()
-    print(f"roles={counts['roles']} docs={counts['docs']} catalogs={counts['catalogs']} items={counts['items']}")
+    print(
+        f"roles={counts['roles']} docs={counts['docs']} catalogs={counts['catalogs']} items={counts['items']}"
+    )
 finally:
     db.close()
