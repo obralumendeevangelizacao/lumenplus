@@ -234,9 +234,9 @@ async def list_emergency_contacts(
 def _apply_profile_fields(
     profile: UserProfile,
     body: ProfileUpdateRequest,
-    cpf_hash: str,
-    cpf_encrypted: bytes,
-    rg_encrypted: bytes,
+    cpf_hash: str | None,
+    cpf_encrypted: bytes | None,
+    rg_encrypted: bytes | None,
 ) -> None:
     """Aplica campos do request no profile existente."""
     profile.full_name = body.full_name
@@ -303,9 +303,9 @@ def _apply_profile_fields(
 def _create_profile(
     user_id: UUID,
     body: ProfileUpdateRequest,
-    cpf_hash: str,
-    cpf_encrypted: bytes,
-    rg_encrypted: bytes,
+    cpf_hash: str | None,
+    cpf_encrypted: bytes | None,
+    rg_encrypted: bytes | None,
 ) -> UserProfile:
     """Instancia novo UserProfile a partir do request."""
     return UserProfile(

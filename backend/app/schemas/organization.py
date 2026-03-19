@@ -162,3 +162,9 @@ class MembersListResponse(BaseModel):
     org_unit_name: str
     members: List[MemberOut] = []
     total: int = 0
+
+
+class UpdateOrgUnitRequest(BaseModel):
+    """Request para editar nome/descrição de uma unidade."""
+    name: str | None = None
+    description: str | None = None
