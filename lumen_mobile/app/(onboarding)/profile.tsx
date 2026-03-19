@@ -33,6 +33,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import api from '@/services/api';
+import { orgService, MinistryItem } from '@/services';
 
 const colors = {
   primary: '#1a365d',
@@ -59,10 +60,8 @@ interface CatalogResponse {
   items: CatalogItem[];
 }
 
-interface Ministry {
-  id: string;
-  name: string;
-}
+// MinistryItem importado de @/services (alinhado com GET /org/ministries)
+type Ministry = MinistryItem;
 
 interface ExistingProfile {
   full_name?: string;
@@ -186,12 +185,12 @@ export default function ProfileScreen() {
         if (digits) setPhone(formatPhone(digits));
       }
 
-      // Carrega ministérios disponíveis
+      // Carrega ministérios disponíveis via GET /org/ministries
       try {
-        const orgResponse = await api.get<{ ministries: Ministry[] }>('/org/ministries');
-        setMinistries(orgResponse.ministries || []);
+        const { ministries } = await orgService.getMinistries();
+        setMinistries(ministries);
       } catch {
-        // Ministérios podem não existir ainda
+        // Ministérios são opcionais — falha silenciosa não bloqueia o cadastro
         setMinistries([]);
       }
     } catch (err) {
