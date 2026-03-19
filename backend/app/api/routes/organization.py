@@ -109,6 +109,32 @@ async def create_root_unit(
         handle_org_error(e)
 
 
+@router.get("/ministries")
+async def list_ministries(
+    user: CurrentUser,
+    db: DBSession,
+):
+    """
+    Lista todos os ministérios ativos (tipo MINISTERIO).
+
+    Usado pelo app mobile no formulário de perfil para o campo
+    "Interesse em Ministério". Retorna apenas id, name e slug.
+    """
+    ministries = db.execute(
+        sa_select(OrgUnit).where(
+            OrgUnit.type == OrgUnitType.MINISTERIO,
+            OrgUnit.is_active == True,  # noqa: E711
+        ).order_by(OrgUnit.name)
+    ).scalars().all()
+
+    return {
+        "ministries": [
+            {"id": str(m.id), "name": m.name, "slug": m.slug}
+            for m in ministries
+        ]
+    }
+
+
 @router.get("/tree", response_model=OrgTreeResponse)
 async def get_organization_tree(
     user: CurrentUser,

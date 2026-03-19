@@ -94,6 +94,14 @@ export const legalService = {
 // =============================================================================
 // ORGANIZATION
 // =============================================================================
+
+/** Item de ministério retornado por GET /org/ministries. */
+export interface MinistryItem {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export const orgService = {
   /**
    * Retorna árvore organizacional.
@@ -103,6 +111,12 @@ export const orgService = {
 
   /** Lista memberships ativos do usuário autenticado. */
   getMyMemberships: () => api.get<Membership[]>('/org/my/memberships'),
+
+  /**
+   * Lista ministérios ativos disponíveis para seleção no perfil.
+   * Endpoint: GET /org/ministries
+   */
+  getMinistries: () => api.get<{ ministries: MinistryItem[] }>('/org/ministries'),
 };
 
 // =============================================================================

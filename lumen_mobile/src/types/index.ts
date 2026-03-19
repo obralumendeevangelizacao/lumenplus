@@ -307,7 +307,7 @@ export interface InboxSendResponse {
 
 export interface InboxPreviewResponse {
   recipient_count: number;
-  filters_applied: Record<string, any> | null;
+  filters_applied: Record<string, unknown> | null;
 }
 
 // =============================================================================
@@ -337,13 +337,9 @@ export interface ConfirmVerificationResponse {
 // =============================================================================
 // API
 // =============================================================================
-export interface ApiError {
-  detail: {
-    error: string;
-    message: string;
-    field?: string;
-  };
-}
+
+// Importado de utils/error — re-exportado aqui para compatibilidade
+export type { ApiErrorDetail as ApiError } from '@/utils/error';
 
 export interface HealthResponse {
   status: string;

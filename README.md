@@ -1,244 +1,177 @@
-# Lumen+ — Backend & Infrastructure
+# Lumen+ — Plataforma para Comunidades Católicas
 
-Sistema de gestão para comunidades católicas. Esta é a **FASE 0** do projeto, contendo a fundação técnica.
+Sistema de gestão para comunidades católicas. App já está online.
 
 ## Stack
 
-- **Backend**: Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic
-- **Database**: PostgreSQL 16
-- **Cache/Rate Limit**: Redis 7
-- **CMS**: Strapi 4.x
-- **Auth**: Firebase Authentication (modo DEV disponível)
+| Camada | Tecnologia |
+|--------|-----------|
+| **Backend** | Python 3.12, FastAPI 0.115+, SQLAlchemy 2.x, Alembic |
+| **Banco de Dados** | PostgreSQL 16 |
+| **Cache / Rate Limit** | Redis 7 |
+| **Autenticação** | Firebase Authentication (modo DEV disponível para desenvolvimento local) |
+| **Mobile** | React Native 0.76 + Expo 52, TypeScript, Expo Router 4 |
+| **Estado (Mobile)** | Zustand 4 |
+| **Dados (Mobile)** | TanStack React Query 5 |
 
 ## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Cliente (App)                         │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      FastAPI Backend                         │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
-│  │   Auth   │  │   Org    │  │  Audit   │  │ Rate Limit  │ │
-│  │(Firebase)│  │ Service  │  │ Service  │  │  (Redis)    │ │
-│  └──────────┘  └──────────┘  └──────────┘  └─────────────┘ │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-   ┌────────────┐      ┌────────────┐      ┌────────────┐
-   │ PostgreSQL │      │   Redis    │      │   Strapi   │
-   │ (dados)    │      │ (cache)    │      │   (CMS)    │
-   └────────────┘      └────────────┘      └────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                   App Mobile (React Native)                   │
+│   Expo Router · Zustand · Firebase Auth · fetch nativo       │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ HTTPS + Bearer Token
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       FastAPI Backend                         │
+│  Auth · Profile · Org · Inbox · Verify · Legal · Admin       │
+└──────────────────┬───────────────────────┬───────────────────┘
+                   │                       │
+           ┌───────▼──────┐       ┌────────▼───────┐
+           │  PostgreSQL  │       │     Redis       │
+           │   (dados)    │       │ (rate limiting) │
+           └──────────────┘       └────────────────┘
 ```
 
-## Modelo Organizacional
+## Módulos implementados
 
+### Backend (`backend/app/`)
+
+| Módulo | Rotas | Status |
+|--------|-------|--------|
+| **Auth** | `POST /auth/register`, `GET /auth/me` | ✅ Estável |
+| **Profile** | `GET /PUT /profile`, `/profile/catalogs`, `/profile/emergency-contact` | ✅ Estável |
+| **Organization** | `/org/tree`, `/org/ministries`, `/org/units/*`, `/org/my/*` | ✅ Estável |
+| **Invites** | `/org/units/{id}/invites`, `/org/invites/{id}/accept|reject` | ✅ Estável |
+| **Inbox** | `/inbox`, `/inbox/send`, `/inbox/send/scopes`, `/inbox/permissions` | ✅ Estável |
+| **Legal** | `GET /legal/latest`, `POST /legal/accept` | ✅ Estável |
+| **Verification** | `POST /verify/phone/start|confirm`, `POST /verify/email/start|confirm` | ✅ Estável |
+| **Admin** | `GET /admin/users`, `PATCH /admin/users/{id}`, `/toggle-avisos` | ✅ Estável |
+
+### Mobile (`lumen_mobile/app/`)
+
+| Tela | Status |
+|------|--------|
+| Login (Firebase email/senha) | ✅ Estável |
+| Cadastro | ✅ Estável |
+| Onboarding: Termos | ✅ Estável |
+| Onboarding: Perfil | ✅ Estável |
+| Onboarding: Documentos (CPF/RG) | ✅ Estável |
+| Home / Inbox | ✅ Estável |
+| Convites | ✅ Estável |
+| Comunidade (árvore org) | ✅ Estável |
+| Perfil (tabs) | ✅ Estável |
+| Admin: Usuários | ✅ Estável |
+| Admin: Entidades Org | ✅ Estável |
+| Admin: Criar Aviso | ✅ Estável |
+| Admin: Avisos Enviados | ✅ Estável |
+
+## O que é DEV-only
+
+| Recurso | Detalhe |
+|---------|---------|
+| `AUTH_MODE=DEV` | Aceita tokens no formato `Bearer dev:<uid>:<email>` sem Firebase |
+| `ENABLE_DEV_ENDPOINTS=true` | Habilita rotas `/dev/*` (reset de banco, seed, etc.) |
+| `DEBUG_VERIFICATION_CODE=true` | Retorna o código de verificação de telefone na resposta (nunca em produção) |
+| `docs_url=/docs` | Swagger UI disponível apenas em modo dev |
+
+Para desenvolvimento local, configure no `backend/.env`:
 ```
-SECTOR (Setor)
-└── MINISTRY (Ministério)  ← herda visibilidade do Setor pai
-
-GROUP (Grupo) ← independente
-```
-
-**Regra de herança**: Se um usuário é membro de um MINISTRY, ele automaticamente é considerado membro do SECTOR pai para fins de **visibilidade** (não autoridade).
-
-## Início Rápido
-
-### Pré-requisitos
-
-- Docker e Docker Compose
-- Make (opcional)
-
-### 1. Subir a infraestrutura
-
-```bash
-# Clonar e entrar no diretório
-cd lumen-plus
-
-# Subir todos os serviços
-docker compose up -d
-
-# Verificar logs
-docker compose logs -f api
-```
-
-### 2. Verificar se está funcionando
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Resposta esperada:
-# {"status":"healthy","timestamp":"2025-01-22T..."}
-```
-
-### 3. Criar dados de seed (desenvolvimento)
-
-```bash
-# Primeiro, criar um usuário fazendo uma requisição autenticada
-curl -X GET http://localhost:8000/me \
-  -H "Authorization: Bearer dev:admin:admin@example.com"
-
-# Executar seed (criar roles e org units de exemplo)
-curl -X POST http://localhost:8000/dev/seed \
-  -H "Authorization: Bearer dev:admin:admin@example.com"
+AUTH_MODE=DEV
+ENABLE_DEV_ENDPOINTS=true
+DEBUG_VERIFICATION_CODE=true
 ```
 
-### 4. Verificar estrutura organizacional
+## Variáveis de ambiente obrigatórias em produção
 
-```bash
-curl http://localhost:8000/org-units/tree | jq
+**Backend:**
 ```
-
-## Endpoints
-
-| Método | Endpoint | Auth | Descrição |
-|--------|----------|------|-----------|
-| GET | `/health` | Não | Health check |
-| GET | `/me` | Sim | Dados do usuário autenticado |
-| GET | `/org-units/tree` | Não* | Árvore organizacional |
-| POST | `/dev/seed` | Sim | Criar dados de exemplo (dev only) |
-| POST | `/dev/org-units` | Sim | Criar org unit (dev only) |
-
-*Rate limited
-
-## Autenticação
-
-### Modo DEV (padrão)
-
-Em desenvolvimento, use tokens no formato:
-```
-Authorization: Bearer dev:<uid>:<email>
-```
-
-Exemplo:
-```bash
-curl http://localhost:8000/me \
-  -H "Authorization: Bearer dev:user123:user@example.com"
-```
-
-### Modo PROD
-
-Em produção, use tokens reais do Firebase. Configure:
-```bash
+ENVIRONMENT=production
 AUTH_MODE=PROD
-FIREBASE_PROJECT_ID=seu-projeto-firebase
+SECRET_KEY=<chave-aleatória-longa>
+ENCRYPTION_KEY=<base64-de-32-bytes>   # Para criptografia AES-256-GCM de CPF/RG
+HMAC_PEPPER=<base64-de-32-bytes>      # Para HMAC-SHA256 de CPF
+DATABASE_URL=postgresql+psycopg://...
+REDIS_URL=redis://...
+FIREBASE_PROJECT_ID=<seu-projeto>
+CORS_ORIGINS=https://seuapp.com
 ```
 
-## Strapi CMS
+**Mobile:**
+```
+EXPO_PUBLIC_API_URL=https://api.seudominio.com
+```
 
-O Strapi estará disponível em `http://localhost:1337`.
+## Setup de desenvolvimento
 
-### Primeira execução
-
-1. Acesse `http://localhost:1337/admin`
-2. Crie um usuário administrador
-3. Crie o Content Type `formation_post`:
-
-**Campos:**
-- `title` (Text, required)
-- `slug` (UID, based on title)
-- `cover_image` (Media, single, optional)
-- `content` (Rich text)
-- `published_at` (Datetime)
-- `visibility` (Enumeration: public, logged_in, restricted)
-- `audience_attributes` (JSON)
-- `audience_org_units_any` (JSON)
-
-**Importante**: Mantenha as permissões de API restritas. O Strapi não deve ser acessível publicamente.
-
-## Desenvolvimento Local
-
-### Sem Docker
+### Backend
 
 ```bash
 cd backend
-
-# Criar venv
-python -m venv .venv
-source .venv/bin/activate
-
-# Instalar dependências
+docker compose up -d          # PostgreSQL + Redis
 pip install -e ".[dev]"
-
-# Configurar variáveis
-cp .env.example .env
-# Edite .env conforme necessário
-
-# Rodar migrações
 alembic upgrade head
-
-# Rodar servidor
 uvicorn app.main:app --reload
 ```
 
-### Comandos úteis
+### Mobile
 
 ```bash
-# Lint
-ruff check .
-
-# Format
-ruff format .
-
-# Type check
-mypy app
-
-# Testes
-pytest -v
+cd lumen_mobile
+npm install
+npx expo start
 ```
 
-## Decisões de Design (Suposições)
+## O que está adiado (próximas etapas)
 
-1. **UUID como PK**: Todas as tabelas usam UUID para evitar problemas de collision em sistemas distribuídos.
+| Feature | Status |
+|---------|--------|
+| **Módulo de Retiros** | ❌ NÃO implementado — planejado para etapa futura |
+| Upload de foto de perfil (S3/GCS) | ❌ NÃO implementado — endpoint aceita mas não persiste arquivo |
+| Envio de SMS/WhatsApp para verificação | ❌ NÃO implementado — código retornado na resposta em modo dev |
+| Integração Strapi CMS | ❌ NÃO implementado — diretório placeholder presente |
+| Rate limiting por usuário (além de por IP) | 🔶 Parcial — só por IP |
+| Acesso admin a CPF/RG (fluxo request/approve) | 🔶 Parcial — lógica em `api/admin_routes.py`, não registrado |
 
-2. **Soft inheritance**: A herança MINISTRY→SECTOR é apenas para visibilidade de conteúdo, não para autoridade administrativa.
-
-3. **Audit log imutável**: Logs de auditoria nunca são deletados ou modificados.
-
-4. **Rate limit por IP**: Implementação simples via Redis. Em produção, considerar rate limit por usuário também.
-
-5. **Strapi isolado**: O CMS não expõe API pública. O backend consumirá via rede interna.
-
-6. **Token provisioning**: Usuários são criados automaticamente no primeiro login válido.
-
-## Estrutura de Diretórios
+## Estrutura de diretórios relevante
 
 ```
-backend/
-├── alembic/          # Migrações de banco
-├── app/
-│   ├── api/          # Rotas e dependências
-│   ├── audit/        # Serviço de auditoria
-│   ├── auth/         # Verificação Firebase
-│   ├── db/           # Models e sessão
-│   ├── middlewares/  # Logging e rate limit
-│   ├── org/          # Lógica organizacional
-│   ├── schemas/      # Pydantic schemas
-│   ├── main.py       # App FastAPI
-│   └── settings.py   # Configurações
-└── tests/            # Testes pytest
+lumenplus-main/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── profile_routes.py      # Rotas de perfil (canônico)
+│   │   │   ├── inbox_routes.py        # Rotas de inbox
+│   │   │   ├── legal_routes.py        # Rotas legais
+│   │   │   ├── verification_routes.py # Rotas de verificação
+│   │   │   └── routes/
+│   │   │       ├── auth.py            # Autenticação
+│   │   │       ├── organization.py    # Organização
+│   │   │       └── admin.py           # Admin
+│   │   ├── audit/service.py           # Serviço de auditoria (canônico)
+│   │   ├── crypto/service.py          # AES-256-GCM para CPF/RG
+│   │   ├── db/models.py               # Modelos SQLAlchemy
+│   │   ├── schemas/                   # Schemas Pydantic
+│   │   └── settings.py                # Configurações (fonte canônica)
+│   └── alembic/versions/              # Migrações de banco
+└── lumen_mobile/
+    ├── app/                           # Telas (Expo Router)
+    └── src/
+        ├── services/                  # Clientes de API
+        ├── stores/                    # Estado global (Zustand)
+        ├── types/                     # Tipos TypeScript
+        └── utils/                     # Utilitários (error parsing, etc.)
 ```
 
-## CI/CD
+## Migrações de banco
 
-O GitHub Actions workflow em `.github/workflows/ci.yml` executa:
+```bash
+# Aplicar todas as migrações
+alembic upgrade head
 
-1. **Lint**: ruff check
-2. **Format check**: ruff format --check
-3. **Type check**: mypy
-4. **Testes**: pytest
+# Criar nova migração
+alembic revision --autogenerate -m "descrição"
+```
 
-## Próximas Fases
-
-- [ ] FASE 1: Atributos de usuário, fluxo de convite
-- [ ] FASE 2: Sistema de formação (conteúdo + progresso)
-- [ ] FASE 3: Eventos e notificações
-- [ ] FASE 4: Relatórios e analytics
-
-## Licença
-
-Proprietário — uso restrito.
+Histórico de migrações em `backend/alembic/versions/`.
