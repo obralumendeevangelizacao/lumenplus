@@ -159,12 +159,14 @@ async def get_me(
         select(LegalDocument)
         .where(LegalDocument.type == "TERMS")
         .order_by(LegalDocument.published_at.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
     latest_privacy = db.execute(
         select(LegalDocument)
         .where(LegalDocument.type == "PRIVACY")
         .order_by(LegalDocument.published_at.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
     user_consent_doc_ids = set()
