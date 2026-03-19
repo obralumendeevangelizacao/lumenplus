@@ -2,7 +2,7 @@
 Conteúdo canônico dos documentos legais.
 =========================================
 Fonte única de verdade para Termos de Uso e Política de Privacidade.
-Importado pela migration 009 e pelo seed de dev.
+Importado pelas migrations e pelo seed de dev.
 
 ATENÇÃO: Qualquer alteração de texto aqui requer:
   1. Bump de versão (ex: "1.0" → "1.1")
@@ -211,3 +211,8 @@ O Lumen+ opera exclusivamente em território brasileiro. Os dados são armazenad
 Dúvidas sobre esta Política de Privacidade:
 E-mail: privacidade@obralumen.org.br
 """
+
+# v1.1 — mesmo conteúdo da v1.0, versão bumped para forçar re-aceitação de todos os usuários
+# (substitui texto placeholder que pôde ter sido aceito antes da migration 009)
+TERMS_V1_1 = TERMS_V1.replace("Versão 1.0", "Versão 1.1")
+PRIVACY_V1_1 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.1")
