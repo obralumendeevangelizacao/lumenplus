@@ -79,9 +79,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="community"
         options={{
-          title: 'Grupo',
+          title: 'Convites',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "people" : "people-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "mail-open" : "mail-open-outline"} size={24} color={color} />
           ),
         }}
       />
