@@ -10,15 +10,20 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import User, OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
+from sqlalchemy import select as sa_select
+
+from app.db.models import MembershipStatus, OrgMembership
 from app.schemas.organization import (
-    CreateOrgUnitRequest, OrgUnitOut, OrgUnitWithChildren, OrgTreeResponse,
-    SendInviteRequest, InviteDetailOut, InviteResponse, PendingInvitesResponse,
-    MemberOut, MembersListResponse,
+    CreateOrgUnitRequest, InviteDetailOut, InviteResponse, MemberOut,
+    MembersListResponse, OrgTreeResponse, OrgUnitOut, OrgUnitWithChildren,
+    PendingInvitesResponse, SendInviteRequest, UpdateOrgUnitRequest,
 )
 from app.services.organization import (
-    OrgServiceError, create_org_unit, send_invite, respond_to_invite,
-    get_org_tree, get_org_unit_members, get_org_unit_pending_invites,
-    is_coordinator_of, get_user_global_roles, update_org_unit,
+    OrgServiceError, create_org_unit, get_org_tree, get_org_unit_members,
+    get_org_unit_pending_invites, get_user_global_roles, get_user_pending_invites,
+    get_user_permissions, is_coordinator_of, remove_member,
+    respond_to_invite, search_users_for_invite, send_invite,
+    update_member_role, update_org_unit,
 )
 
 router = APIRouter(prefix="/org", tags=["organization"])
@@ -56,7 +61,6 @@ async def create_root_unit(
     Cria a unidade raiz (CONSELHO_GERAL). Requer papel global DEV ou ADMIN.
     Só pode existir uma unidade raiz ativa.
     """
-    from sqlalchemy import select as sa_select
     global_roles = get_user_global_roles(db, user.id)
     if not any(r in global_roles for r in ["DEV", "ADMIN"]):
         raise HTTPException(
@@ -390,8 +394,6 @@ async def get_my_pending_invites(
     db: DBSession,
 ):
     """Lista convites pendentes do usuário logado."""
-    from app.services.organization import get_user_pending_invites
-    
     invites = get_user_pending_invites(db, user.id)
     
     result = []
@@ -428,11 +430,8 @@ async def get_my_memberships(
     db: DBSession,
 ):
     """Lista memberships ativos do usuário."""
-    from app.db.models import OrgMembership, MembershipStatus
-    from sqlalchemy import select
-    
     memberships = db.execute(
-        select(OrgMembership)
+        sa_select(OrgMembership)
         .where(
             OrgMembership.user_id == user.id,
             OrgMembership.status == MembershipStatus.ACTIVE,
@@ -466,8 +465,6 @@ async def search_users_to_invite(
     q: str = "",
 ):
     """Busca usuários para convidar (exclui membros e convites pendentes)."""
-    from app.services.organization import search_users_for_invite
-    
     if len(q) < 2:
         return []
     
@@ -497,8 +494,6 @@ async def update_member_role_endpoint(
     db: DBSession,
 ):
     """Atualiza papel de um membro (COORDINATOR ou MEMBER)."""
-    from app.services.organization import update_member_role
-    
     try:
         new_role = OrgRoleCode(role)
     except ValueError:
@@ -523,8 +518,6 @@ async def remove_member_endpoint(
     db: DBSession,
 ):
     """Remove um membro da unidade."""
-    from app.services.organization import remove_member
-    
     try:
         remove_member(db, org_unit_id, member_user_id, user.id)
         return {"message": "Membro removido com sucesso"}
@@ -539,8 +532,6 @@ async def leave_unit(
     db: DBSession,
 ):
     """Sai de uma unidade (remove a si mesmo)."""
-    from app.services.organization import remove_member
-    
     try:
         remove_member(db, org_unit_id, user.id, user.id)
         return {"message": "Você saiu da unidade"}
@@ -555,21 +546,12 @@ async def get_unit_permissions(
     db: DBSession,
 ):
     """Retorna permissões do usuário na unidade."""
-    from app.services.organization import get_user_permissions
-
     return get_user_permissions(db, user.id, org_unit_id)
 
 
 # =============================================================================
 # EDIÇÃO DE UNIDADES
 # =============================================================================
-
-from pydantic import BaseModel as _BaseModel
-
-class UpdateOrgUnitRequest(_BaseModel):
-    name: str | None = None
-    description: str | None = None
-
 
 @router.patch("/units/{unit_id}", response_model=OrgUnitOut)
 async def update_org_unit_endpoint(

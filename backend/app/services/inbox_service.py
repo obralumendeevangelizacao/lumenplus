@@ -1,4 +1,4 @@
-﻿"""
+"""
 Inbox Service
 =============
 Serviço para gerenciamento de avisos/inbox.
