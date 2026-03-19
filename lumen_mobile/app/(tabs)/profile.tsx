@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, ActivityIndicator, FlatList,
-  RefreshControl, Image, Switch, Platform,
+  RefreshControl, Image, Switch, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -289,8 +289,19 @@ export default function ProfileScreen() {
       await loadProfile();
       setEditVisible(false);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail?.message ?? 'Não foi possível salvar.';
+      // Loga o erro completo para diagnóstico
+      console.error('[handleSaveProfile] Erro ao salvar perfil:', JSON.stringify(err?.response?.data ?? err?.message ?? err));
+      const status = err?.response?.status;
+      const detail = err?.response?.data?.detail;
+      let msg = 'Não foi possível salvar. Tente novamente.';
+      if (typeof detail === 'string') msg = detail;
+      else if (detail?.message) msg = detail.message;
+      else if (Array.isArray(detail) && detail[0]?.msg) msg = `Dado inválido: ${detail[0].msg}`;
+      else if (status === 409) msg = 'Conflito: telefone ou CPF já cadastrado.';
+      else if (status === 503) msg = 'Serviço temporariamente indisponível.';
       setSaveError(msg);
+      // Alert popup para garantir visibilidade do erro
+      Alert.alert('Erro ao Salvar', msg, [{ text: 'OK' }]);
     } finally {
       setSaving(false);
     }
