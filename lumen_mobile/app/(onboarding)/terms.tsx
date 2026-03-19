@@ -12,6 +12,7 @@ import {
   ScrollView,
   Switch,
   Pressable,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useOnboardingStore, useAuthStore } from '@/stores';
@@ -35,13 +36,31 @@ export default function TermsScreen() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const { legal, isLoadingLegal, isSaving, loadLegal, acceptTerms, error } =
     useOnboardingStore();
-  const { refreshUser } = useAuthStore();
+  const { refreshUser, logout } = useAuthStore();
 
   useEffect(() => {
     loadLegal();
   }, []);
 
   const canAccept = termsAccepted && privacyAccepted;
+
+  const handleDecline = () => {
+    Alert.alert(
+      'Recusar termos',
+      'Ao recusar, você será desconectado do app. Deseja continuar?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sim, sair',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            router.replace('/(auth)/login');
+          },
+        },
+      ]
+    );
+  };
 
   const handleAccept = async () => {
     if (!canAccept) return;
@@ -136,6 +155,14 @@ export default function TermsScreen() {
           disabled={!canAccept}
           fullWidth
           size="lg"
+        />
+        <Button
+          title="Não aceito"
+          onPress={handleDecline}
+          variant="ghost"
+          fullWidth
+          size="md"
+          style={styles.declineButton}
         />
       </View>
     </View>
@@ -252,5 +279,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text.tertiary,
     textAlign: 'center',
     marginBottom: theme.spacing.sm,
+  },
+  declineButton: {
+    marginTop: theme.spacing.xs,
   },
 });

@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { Tabs, router } from 'expo-router';
 import { View, Image, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { profileService } from '@/services';
+import { authService, profileService } from '@/services';
 
 const colors = {
   primary: '#1A859B',
@@ -22,6 +22,14 @@ export default function TabsLayout() {
   useEffect(() => {
     (async () => {
       try {
+        // 1. Verifica consentimento dos termos (LGPD) — tem prioridade
+        const me = await authService.getMe();
+        if (me.consents.pending_terms || me.consents.pending_privacy) {
+          router.replace('/(onboarding)/terms');
+          return;
+        }
+
+        // 2. Verifica documentos obrigatórios (CPF/RG)
         const profile = await profileService.getProfile();
         if (!profile.has_documents) {
           router.replace('/(onboarding)/complete-documents');
