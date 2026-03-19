@@ -108,12 +108,12 @@ async def accept_legal(
 
     existing_terms = db.query(UserConsent).filter(UserConsent.user_id == current_user.id, UserConsent.document_id == terms_doc.id).first()
     if not existing_terms:
-        db.add(UserConsent(user_id=current_user.id, document_id=terms_doc.id, ip=client_ip, user_agent=user_agent))
+        db.add(UserConsent(user_id=current_user.id, document_id=terms_doc.id))
         terms_accepted = True
 
     existing_privacy = db.query(UserConsent).filter(UserConsent.user_id == current_user.id, UserConsent.document_id == privacy_doc.id).first()
     if not existing_privacy:
-        db.add(UserConsent(user_id=current_user.id, document_id=privacy_doc.id, ip=client_ip, user_agent=user_agent))
+        db.add(UserConsent(user_id=current_user.id, document_id=privacy_doc.id))
         privacy_accepted = True
 
     preferences = db.query(UserPreferences).filter(UserPreferences.user_id == current_user.id).first()

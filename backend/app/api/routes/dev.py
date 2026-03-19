@@ -46,10 +46,11 @@ async def seed_database(db: Session = Depends(get_db)):
             db.add(GlobalRole(code=code, name=name))
             results["global_roles"] += 1
     
-    # Legal Documents
+    # Legal Documents — importados da migration canônica
+    from app.legal_content import TERMS_V1, PRIVACY_V1
     docs = [
-        ("TERMS", "1.0", "Termos de Uso do Lumen+\n\nAo utilizar o aplicativo..."),
-        ("PRIVACY", "1.0", "Política de Privacidade do Lumen+\n\nSeus dados são..."),
+        ("TERMS", "1.0", TERMS_V1),
+        ("PRIVACY", "1.0", PRIVACY_V1),
     ]
     for doc_type, version, content in docs:
         existing = db.execute(
