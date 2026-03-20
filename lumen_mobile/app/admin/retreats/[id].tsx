@@ -108,6 +108,19 @@ interface OrgUnit {
   unit_type: string;
 }
 
+interface VocRealityItem {
+  id: string;
+  code: string;
+  label: string;
+}
+
+interface OrgTreeNode {
+  id: string;
+  name: string;
+  type: string;
+  children?: OrgTreeNode[];
+}
+
 interface RetreatDetail {
   id: string;
   title: string;
@@ -167,11 +180,13 @@ export default function AdminRetreatDetailScreen() {
 
   // Eligibility rule modal
   const [eligibilityModal, setEligibilityModal] = useState<{ group: 'PARTICIPANT' | 'SERVICE' } | null>(null);
-  const [ruleType, setRuleType]       = useState<'ORG_UNIT' | 'VOCATIONAL_REALITY'>('ORG_UNIT');
-  const [vocCode, setVocCode]         = useState('');
-  const [orgUnits, setOrgUnits]       = useState<OrgUnit[]>([]);
+  const [ruleType, setRuleType]               = useState<'ORG_UNIT' | 'VOCATIONAL_REALITY'>('ORG_UNIT');
+  const [orgUnits, setOrgUnits]               = useState<OrgUnit[]>([]);
   const [selectedOrgUnit, setSelectedOrgUnit] = useState<OrgUnit | null>(null);
   const [orgUnitsLoaded, setOrgUnitsLoaded]   = useState(false);
+  const [vocRealityItems, setVocRealityItems] = useState<VocRealityItem[]>([]);
+  const [selectedVocItem, setSelectedVocItem] = useState<VocRealityItem | null>(null);
+  const [catalogLoaded, setCatalogLoaded]     = useState(false);
 
   const fetchData = async () => {
     try {
@@ -332,16 +347,40 @@ export default function AdminRetreatDetailScreen() {
   // ---- Eligibility rules ----
   const openEligibilityModal = async (group: 'PARTICIPANT' | 'SERVICE') => {
     setRuleType('ORG_UNIT');
-    setVocCode('');
     setSelectedOrgUnit(null);
+    setSelectedVocItem(null);
     setEligibilityModal({ group });
+
+    // Fetch org units (flattened from tree) — once
     if (!orgUnitsLoaded) {
       try {
-        const res = await api.get<{ org_units: OrgUnit[] }>('/org/units');
-        setOrgUnits(res.org_units || []);
+        const treeRes = await api.get<{ root: OrgTreeNode | null }>('/org/tree');
+        const flat: OrgUnit[] = [];
+        const flattenTree = (node: OrgTreeNode | null) => {
+          if (!node) return;
+          // Skip the root CONSELHO_GERAL in the list (too broad)
+          if (node.type !== 'CONSELHO_GERAL') {
+            flat.push({ id: node.id, name: node.name, unit_type: node.type });
+          }
+          node.children?.forEach(flattenTree);
+        };
+        flattenTree(treeRes.root);
+        setOrgUnits(flat);
         setOrgUnitsLoaded(true);
       } catch {
         setOrgUnits([]);
+      }
+    }
+
+    // Fetch vocational reality catalog items — once
+    if (!catalogLoaded) {
+      try {
+        const catalogs = await api.get<{ code: string; name: string; items: VocRealityItem[] }[]>('/profile/catalogs');
+        const vocCatalog = catalogs.find(c => c.code === 'VOCATIONAL_REALITY');
+        setVocRealityItems(vocCatalog?.items || []);
+        setCatalogLoaded(true);
+      } catch {
+        setVocRealityItems([]);
       }
     }
   };
@@ -351,15 +390,15 @@ export default function AdminRetreatDetailScreen() {
     if (ruleType === 'ORG_UNIT' && !selectedOrgUnit) {
       setActionMsg('Selecione uma unidade'); return;
     }
-    if (ruleType === 'VOCATIONAL_REALITY' && !vocCode.trim()) {
-      setActionMsg('Informe o código da realidade vocacional'); return;
+    if (ruleType === 'VOCATIONAL_REALITY' && !selectedVocItem) {
+      setActionMsg('Selecione uma realidade vocacional'); return;
     }
     setProcessing(true);
     try {
       await api.post(`/admin/retreats/${id}/eligibility-rules`, {
         rule_type: ruleType,
         org_unit_id: ruleType === 'ORG_UNIT' ? selectedOrgUnit!.id : null,
-        vocational_reality_code: ruleType === 'VOCATIONAL_REALITY' ? vocCode.trim() : null,
+        vocational_reality_code: ruleType === 'VOCATIONAL_REALITY' ? selectedVocItem!.code : null,
         rule_group: eligibilityModal.group,
       });
       setActionMsg('Regra adicionada');
@@ -955,8 +994,12 @@ export default function AdminRetreatDetailScreen() {
                         style={[styles.houseOption, selectedOrgUnit?.id === ou.id && styles.houseOptionActive]}
                         onPress={() => setSelectedOrgUnit(ou)}
                       >
-                        <Text style={styles.houseOptionText}>{ou.name}</Text>
-                        <Text style={styles.houseOptionSub}>{ou.unit_type}</Text>
+                        <Text style={[styles.houseOptionText, selectedOrgUnit?.id === ou.id && { color: colors.white }]}>
+                          {ou.name}
+                        </Text>
+                        <Text style={[styles.houseOptionSub, selectedOrgUnit?.id === ou.id && { color: '#e9d5ff' }]}>
+                          {ou.unit_type}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -964,15 +1007,24 @@ export default function AdminRetreatDetailScreen() {
               </View>
             ) : (
               <View>
-                <Text style={styles.fieldLabel}>Código da realidade vocacional</Text>
-                <TextInput
-                  style={styles.input}
-                  value={vocCode}
-                  onChangeText={setVocCode}
-                  placeholder="Ex: MISSAO, CASAS, CV..."
-                  placeholderTextColor="#9ca3af"
-                  autoCapitalize="characters"
-                />
+                <Text style={styles.fieldLabel}>Realidade vocacional</Text>
+                {vocRealityItems.length === 0 ? (
+                  <Text style={styles.emptyText}>Carregando realidades vocacionais...</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+                    {vocRealityItems.map(item => (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[styles.houseOption, selectedVocItem?.code === item.code && styles.houseOptionActive]}
+                        onPress={() => setSelectedVocItem(item)}
+                      >
+                        <Text style={[styles.houseOptionText, selectedVocItem?.code === item.code && { color: colors.white }]}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
               </View>
             )}
 
@@ -1036,9 +1088,12 @@ function MetaRow({ icon, text }: { icon: string; text: string }) {
 }
 
 function EligibilityRuleRow({ rule, onDelete }: { rule: EligibilityRule; onDelete: () => void }) {
+  const vocLabel = rule.vocational_reality_code
+    ? rule.vocational_reality_code.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    : '—';
   const label = rule.rule_type === 'ORG_UNIT'
     ? rule.org_unit_name ?? rule.org_unit_id ?? '—'
-    : `Vocacional: ${rule.vocational_reality_code}`;
+    : vocLabel;
   const icon = rule.rule_type === 'ORG_UNIT' ? 'git-network-outline' : 'ribbon-outline';
   return (
     <View style={styles.houseCard}>
