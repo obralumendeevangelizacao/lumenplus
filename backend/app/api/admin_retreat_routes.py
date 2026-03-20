@@ -38,6 +38,7 @@ from app.db.models import (
     InboxRecipient,
     OrgMembership,
     Retreat,
+    RetreatCoordinator,
     RetreatEligibilityRule,
     RetreatEligibilityRuleType,
     RetreatFeeType,
@@ -81,25 +82,45 @@ ALL_FEE_CATEGORIES = list(FEE_CATEGORY_LABELS.keys())
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _require_retreat_manager(db, user_id: UUID) -> None:
+def _is_global_retreat_manager(db, user_id: UUID) -> bool:
+    """Verifica se o usuário é gestor global de retiros (ADMIN/DEV ou PERMISSION_MANAGE_RETREATS)."""
     roles = db.execute(
         select(GlobalRole.code)
         .join(UserGlobalRole, UserGlobalRole.global_role_id == GlobalRole.id)
         .where(UserGlobalRole.user_id == user_id)
     ).scalars().all()
     if any(r in ("ADMIN", "DEV") for r in roles):
-        return
+        return True
     perm = db.execute(
         select(UserPermission).where(
             UserPermission.user_id == user_id,
             UserPermission.permission_code == PERMISSION_MANAGE_RETREATS,
         )
     ).scalar_one_or_none()
-    if not perm:
-        raise HTTPException(
-            status_code=403,
-            detail={"error": "forbidden", "message": "Você não tem permissão para gerenciar retiros"},
-        )
+    return perm is not None
+
+
+def _require_retreat_manager(db, user_id: UUID, retreat_id: UUID | None = None) -> None:
+    """
+    Exige que o usuário seja gestor de retiro.
+    - Sem retreat_id: apenas gestores globais (ADMIN/DEV/PERMISSION_MANAGE_RETREATS).
+    - Com retreat_id: gestores globais OU coordenador daquele retiro específico.
+    """
+    if _is_global_retreat_manager(db, user_id):
+        return
+    if retreat_id:
+        coord = db.execute(
+            select(RetreatCoordinator).where(
+                RetreatCoordinator.retreat_id == retreat_id,
+                RetreatCoordinator.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+        if coord:
+            return
+    raise HTTPException(
+        status_code=403,
+        detail={"error": "forbidden", "message": "Você não tem permissão para gerenciar retiros"},
+    )
 
 
 def _houses_to_list(houses) -> list[dict]:
@@ -185,6 +206,15 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
         "houses": _houses_to_list(retreat.houses),
         "fee_types": _fee_types_to_list(retreat.fee_types),
         "service_teams": _service_teams_to_list(retreat.service_teams),
+        "coordinators": [
+            {
+                "id": str(c.id),
+                "user_id": str(c.user_id),
+                "user_name": (c.user.profile.full_name if c.user and hasattr(c.user, "profile") and c.user.profile else None),
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in (retreat.coordinators or [])
+        ],
         "created_by_user_id": str(retreat.created_by_user_id) if retreat.created_by_user_id else None,
         "created_at": retreat.created_at.isoformat(),
         "updated_at": retreat.updated_at.isoformat(),
@@ -405,14 +435,27 @@ async def create_retreat(body: CreateRetreatBody, current_user: CurrentUser, db:
 
 @router.get("")
 async def list_retreats(current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
-    retreats = db.execute(select(Retreat)).scalars().all()
+    if _is_global_retreat_manager(db, current_user.id):
+        # Gestores globais veem todos os retiros
+        retreats = db.execute(select(Retreat)).scalars().all()
+    else:
+        # Coordenadores de retiro veem apenas os seus retiros
+        coord_entries = db.execute(
+            select(RetreatCoordinator).where(RetreatCoordinator.user_id == current_user.id)
+        ).scalars().all()
+        if not coord_entries:
+            raise HTTPException(
+                status_code=403,
+                detail={"error": "forbidden", "message": "Você não tem permissão para gerenciar retiros"},
+            )
+        retreat_ids = [c.retreat_id for c in coord_entries]
+        retreats = db.execute(select(Retreat).where(Retreat.id.in_(retreat_ids))).scalars().all()
     return {"retreats": [_retreat_to_dict(r, include_registrations=True) for r in retreats]}
 
 
 @router.get("/{retreat_id}")
 async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -421,7 +464,7 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
 
 @router.patch("/{retreat_id}")
 async def update_retreat(retreat_id: UUID, body: PatchRetreatBody, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -494,7 +537,7 @@ async def update_retreat(retreat_id: UUID, body: PatchRetreatBody, current_user:
 
 @router.post("/{retreat_id}/publish")
 async def publish_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -509,7 +552,7 @@ async def publish_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSes
 
 @router.post("/{retreat_id}/close")
 async def close_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -522,7 +565,7 @@ async def close_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSessi
 
 @router.post("/{retreat_id}/cancel")
 async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -539,7 +582,7 @@ async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSess
 
 @router.post("/{retreat_id}/houses", status_code=201)
 async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -560,7 +603,7 @@ async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser
 
 @router.put("/{retreat_id}/houses/{house_id}")
 async def update_house(retreat_id: UUID, house_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     house = db.get(RetreatHouse, house_id)
     if not house or house.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada"})
@@ -577,7 +620,7 @@ async def update_house(retreat_id: UUID, house_id: UUID, body: HouseBody, curren
 
 @router.delete("/{retreat_id}/houses/{house_id}", status_code=200)
 async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     house = db.get(RetreatHouse, house_id)
     if not house or house.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada"})
@@ -593,7 +636,7 @@ async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUs
 @router.post("/{retreat_id}/eligibility-rules", status_code=201)
 async def add_eligibility_rule(retreat_id: UUID, body: AddEligibilityRuleBody, current_user: CurrentUser, db: DBSession):
     """Adiciona uma regra de elegibilidade ao retiro (PARTICIPANT ou SERVICE)."""
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -620,7 +663,7 @@ async def add_eligibility_rule(retreat_id: UUID, body: AddEligibilityRuleBody, c
 @router.delete("/{retreat_id}/eligibility-rules/{rule_id}", status_code=200)
 async def delete_eligibility_rule(retreat_id: UUID, rule_id: UUID, current_user: CurrentUser, db: DBSession):
     """Remove uma regra de elegibilidade do retiro."""
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     rule = db.get(RetreatEligibilityRule, rule_id)
     if not rule or rule.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Regra não encontrada"})
@@ -636,7 +679,7 @@ async def delete_eligibility_rule(retreat_id: UUID, rule_id: UUID, current_user:
 @router.post("/{retreat_id}/fee-types")
 async def set_fee_types(retreat_id: UUID, body: SetFeeTypesBody, current_user: CurrentUser, db: DBSession):
     """Substitui todas as taxas do retiro (bulk upsert)."""
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -686,7 +729,7 @@ async def set_fee_types(retreat_id: UUID, body: SetFeeTypesBody, current_user: C
 
 @router.get("/{retreat_id}/registrations")
 async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -740,7 +783,7 @@ async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DB
 
 @router.post("/{retreat_id}/registrations/{registration_id}/confirm")
 async def confirm_payment(retreat_id: UUID, registration_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
     if not reg or reg.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada"})
@@ -756,7 +799,7 @@ async def confirm_payment(retreat_id: UUID, registration_id: UUID, current_user:
 
 @router.post("/{retreat_id}/registrations/{registration_id}/reject")
 async def reject_payment(retreat_id: UUID, registration_id: UUID, body: RejectBody, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
     if not reg or reg.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada"})
@@ -776,7 +819,7 @@ async def reject_payment(retreat_id: UUID, registration_id: UUID, body: RejectBo
 @router.patch("/{retreat_id}/registrations/{registration_id}/house")
 async def assign_house(retreat_id: UUID, registration_id: UUID, body: AssignHouseBody, current_user: CurrentUser, db: DBSession):
     """Atribui (ou remove) uma casa a uma inscrição."""
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
     if not reg or reg.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada"})
@@ -794,7 +837,7 @@ async def assign_house(retreat_id: UUID, registration_id: UUID, body: AssignHous
 @router.patch("/{retreat_id}/registrations/{registration_id}/role")
 async def set_registration_role(retreat_id: UUID, registration_id: UUID, body: SetRoleBody, current_user: CurrentUser, db: DBSession):
     """Muda o papel do participante (PARTICIPANTE ou EQUIPE_SERVICO) e recalcula fee_category."""
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     if body.retreat_role not in ("PARTICIPANTE", "EQUIPE_SERVICO"):
         raise HTTPException(status_code=400, detail={"error": "invalid_role", "message": "Papel deve ser PARTICIPANTE ou EQUIPE_SERVICO"})
 
@@ -862,7 +905,7 @@ async def create_service_team(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -875,7 +918,7 @@ async def create_service_team(
 
 @router.get("/{retreat_id}/service-teams")
 async def list_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -893,7 +936,7 @@ async def update_service_team(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
@@ -908,7 +951,7 @@ async def update_service_team(
 
 @router.delete("/{retreat_id}/service-teams/{team_id}", status_code=200)
 async def delete_service_team(retreat_id: UUID, team_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
@@ -925,7 +968,7 @@ async def assign_team_member(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
@@ -976,7 +1019,7 @@ async def patch_team_member(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
@@ -1006,7 +1049,7 @@ async def remove_team_member(
     current_user: CurrentUser,
     db: DBSession,
 ):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
@@ -1019,12 +1062,100 @@ async def remove_team_member(
 
 
 # ---------------------------------------------------------------------------
+# Coordenadores do Retiro
+# ---------------------------------------------------------------------------
+
+class AddCoordinatorBody(BaseModel):
+    user_id: UUID
+
+
+@router.get("/{retreat_id}/coordinators")
+async def list_coordinators(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+    """Lista coordenadores do retiro. Requer gestor global ou ser coordenador do retiro."""
+    _require_retreat_manager(db, current_user.id, retreat_id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    return {
+        "coordinators": [
+            {
+                "id": str(c.id),
+                "user_id": str(c.user_id),
+                "user_name": (c.user.profile.full_name if c.user and hasattr(c.user, "profile") and c.user.profile else None),
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in (retreat.coordinators or [])
+        ]
+    }
+
+
+@router.post("/{retreat_id}/coordinators", status_code=201)
+async def add_coordinator(retreat_id: UUID, body: AddCoordinatorBody, current_user: CurrentUser, db: DBSession):
+    """Atribui cargo de coordenador do retiro a um usuário. Requer gestor GLOBAL."""
+    if not _is_global_retreat_manager(db, current_user.id):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Apenas gestores globais podem atribuir coordenadores"},
+        )
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    user = db.get(User, body.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Usuário não encontrado"})
+
+    existing = db.execute(
+        select(RetreatCoordinator).where(
+            RetreatCoordinator.retreat_id == retreat_id,
+            RetreatCoordinator.user_id == body.user_id,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail={"error": "already_coordinator", "message": "Usuário já é coordenador deste retiro"})
+
+    coord = RetreatCoordinator(
+        retreat_id=retreat_id,
+        user_id=body.user_id,
+        granted_by_user_id=current_user.id,
+    )
+    db.add(coord)
+    db.commit()
+    db.refresh(coord)
+
+    profile = db.execute(
+        select(UserProfile).where(UserProfile.user_id == body.user_id)
+    ).scalar_one_or_none()
+    return {
+        "id": str(coord.id),
+        "user_id": str(coord.user_id),
+        "user_name": profile.full_name if profile else None,
+        "created_at": coord.created_at.isoformat(),
+    }
+
+
+@router.delete("/{retreat_id}/coordinators/{coordinator_id}", status_code=200)
+async def remove_coordinator(retreat_id: UUID, coordinator_id: UUID, current_user: CurrentUser, db: DBSession):
+    """Remove cargo de coordenador do retiro. Requer gestor GLOBAL."""
+    if not _is_global_retreat_manager(db, current_user.id):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Apenas gestores globais podem remover coordenadores"},
+        )
+    coord = db.get(RetreatCoordinator, coordinator_id)
+    if not coord or coord.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Coordenador não encontrado"})
+    db.delete(coord)
+    db.commit()
+    return {"message": "Coordenador removido"}
+
+
+# ---------------------------------------------------------------------------
 # Export CSV
 # ---------------------------------------------------------------------------
 
 @router.get("/{retreat_id}/export")
 async def export_registrations_csv(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    _require_retreat_manager(db, current_user.id)
+    _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})

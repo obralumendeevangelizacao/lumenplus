@@ -140,6 +140,13 @@ interface ServiceTeam {
   members: ServiceTeamMember[];
 }
 
+interface RetreatCoordinator {
+  id: string;
+  user_id: string;
+  user_name: string | null;
+  created_at: string;
+}
+
 interface RetreatDetail {
   id: string;
   title: string;
@@ -158,6 +165,7 @@ interface RetreatDetail {
   participant_eligibility_rules: EligibilityRule[];
   service_eligibility_rules: EligibilityRule[];
   service_teams: ServiceTeam[];
+  coordinators: RetreatCoordinator[];
 }
 
 export default function AdminRetreatDetailScreen() {
@@ -216,6 +224,11 @@ export default function AdminRetreatDetailScreen() {
   const [assignTeamRegId, setAssignTeamRegId]     = useState('');
   const [assignTeamRole, setAssignTeamRole]       = useState<'COORDENADOR' | 'MEMBRO' | 'APOIO'>('MEMBRO');
   const [assignTeamHouseId, setAssignTeamHouseId] = useState<string | null>(null);
+
+  // Coordinator modal
+  const [coordModal, setCoordModal]   = useState(false);
+  const [coordUserId, setCoordUserId] = useState('');
+  const [coordSearch, setCoordSearch] = useState('');
 
   const fetchData = async () => {
     try {
@@ -514,6 +527,38 @@ export default function AdminRetreatDetailScreen() {
     }
   };
 
+  // ---- Coordinators ----
+  const handleAddCoordinator = async () => {
+    const uid = coordUserId.trim();
+    if (!uid) { setActionMsg('Informe o ID do usuário'); return; }
+    setProcessing(true);
+    try {
+      await api.post(`/admin/retreats/${id}/coordinators`, { user_id: uid });
+      setActionMsg('Coordenador adicionado');
+      setCoordModal(false);
+      setCoordUserId('');
+      setCoordSearch('');
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao adicionar coordenador');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRemoveCoordinator = async (coordId: string) => {
+    setProcessing(true);
+    try {
+      await api.delete(`/admin/retreats/${id}/coordinators/${coordId}`);
+      setActionMsg('Coordenador removido');
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao remover coordenador');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   // ---- Payment actions ----
   const handleConfirmPayment = async (regId: string) => {
     setProcessing(true);
@@ -765,6 +810,56 @@ export default function AdminRetreatDetailScreen() {
       ) : (
         retreat.service_eligibility_rules.map(rule => (
           <EligibilityRuleRow key={rule.id} rule={rule} onDelete={() => handleDeleteEligibilityRule(rule.id)} />
+        ))
+      )}
+
+      {/* ── Coordenadores do Retiro ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Coordenadores ({(retreat.coordinators || []).length})
+        </Text>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => { setCoordUserId(''); setCoordSearch(''); setCoordModal(true); }}
+        >
+          <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+          <Text style={styles.addBtnText}>Adicionar</Text>
+        </TouchableOpacity>
+      </View>
+
+      {(retreat.coordinators || []).length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>Nenhum coordenador atribuído</Text>
+        </View>
+      ) : (
+        (retreat.coordinators || []).map(coord => (
+          <View key={coord.id} style={styles.houseCard}>
+            <View style={styles.row}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View style={{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: `${colors.primary}18`,
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Ionicons name="person-outline" size={18} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.houseName}>{coord.user_name || 'Usuário'}</Text>
+                  <Text style={styles.houseCapacity}>Coordenador de Retiro</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => setConfirmModal({
+                  title: 'Remover coordenador?',
+                  body: `${coord.user_name || 'Este usuário'} perderá acesso à gestão deste retiro.`,
+                  action: async () => { setConfirmModal(null); await handleRemoveCoordinator(coord.id); },
+                })}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.red} />
+              </TouchableOpacity>
+            </View>
+          </View>
         ))
       )}
 
@@ -1206,6 +1301,87 @@ export default function AdminRetreatDetailScreen() {
                 <Text style={styles.outlineBtnText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.confirmBtn} onPress={handleAddEligibilityRule} disabled={processing}>
+                {processing
+                  ? <ActivityIndicator color={colors.white} size="small" />
+                  : <Text style={styles.confirmBtnText}>Adicionar</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modal: adicionar coordenador ── */}
+      <Modal visible={coordModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Adicionar Coordenador</Text>
+            <Text style={styles.modalBody}>
+              O coordenador terá acesso completo à gestão deste retiro.
+            </Text>
+
+            <Text style={styles.fieldLabel}>Selecionar da lista de inscritos</Text>
+            <TextInput
+              style={styles.input}
+              value={coordSearch}
+              onChangeText={setCoordSearch}
+              placeholder="Filtrar por nome..."
+              placeholderTextColor="#9ca3af"
+            />
+            <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+              {regs
+                .filter(r =>
+                  r.status !== 'CANCELLED' &&
+                  (coordSearch === '' || (r.user_name || '').toLowerCase().includes(coordSearch.toLowerCase()))
+                )
+                .map(r => (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.houseOption, coordUserId === r.user_id && styles.houseOptionActive]}
+                    onPress={() => setCoordUserId(r.user_id)}
+                  >
+                    <Ionicons
+                      name="person-outline"
+                      size={16}
+                      color={coordUserId === r.user_id ? colors.white : colors.primary}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.houseOptionText, coordUserId === r.user_id && { color: colors.white }]}>
+                        {r.user_name || 'Membro'}
+                      </Text>
+                      <Text style={[styles.houseOptionSub, coordUserId === r.user_id && { color: '#e9d5ff' }]}>
+                        {r.retreat_role === 'EQUIPE_SERVICO' ? 'Equipe de Serviço' : 'Participante'}
+                      </Text>
+                    </View>
+                    {coordUserId === r.user_id && (
+                      <Ionicons name="checkmark-circle" size={18} color={colors.white} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              {regs.filter(r => r.status !== 'CANCELLED').length === 0 && (
+                <Text style={styles.emptyText}>Nenhum inscrito encontrado</Text>
+              )}
+            </ScrollView>
+
+            <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Ou informe o ID do usuário</Text>
+            <TextInput
+              style={styles.input}
+              value={coordUserId}
+              onChangeText={v => { setCoordUserId(v); setCoordSearch(''); }}
+              placeholder="UUID do usuário"
+              placeholderTextColor="#9ca3af"
+              autoCapitalize="none"
+            />
+
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setCoordModal(false)}>
+                <Text style={styles.outlineBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmBtn, !coordUserId.trim() && { opacity: 0.5 }]}
+                onPress={handleAddCoordinator}
+                disabled={!coordUserId.trim() || processing}
+              >
                 {processing
                   ? <ActivityIndicator color={colors.white} size="small" />
                   : <Text style={styles.confirmBtnText}>Adicionar</Text>

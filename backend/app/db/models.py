@@ -836,6 +836,9 @@ class Retreat(Base):
     service_teams: Mapped[list["RetreatServiceTeam"]] = relationship(
         "RetreatServiceTeam", back_populates="retreat", cascade="all, delete-orphan", lazy="selectin"
     )
+    coordinators: Mapped[list["RetreatCoordinator"]] = relationship(
+        "RetreatCoordinator", back_populates="retreat", cascade="all, delete-orphan", lazy="selectin"
+    )
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
 
 
@@ -1046,3 +1049,31 @@ class RetreatTeamPreference(Base):
     team: Mapped["RetreatServiceTeam"] = relationship(
         "RetreatServiceTeam", back_populates="preferences"
     )
+
+
+class RetreatCoordinator(Base):
+    """
+    Coordenador de um retiro específico.
+    Garante acesso à gestão do retiro sem precisar de cargo global.
+    """
+    __tablename__ = "retreat_coordinators"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    granted_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("retreat_id", "user_id", name="uq_retreat_coordinator"),)
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="coordinators")
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    granted_by: Mapped["User | None"] = relationship("User", foreign_keys=[granted_by_user_id])
