@@ -34,7 +34,7 @@ export default function PaymentScreen() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaType.Images,
       quality: 0.8,
       allowsEditing: true,
     });
@@ -67,10 +67,20 @@ export default function PaymentScreen() {
 
     try {
       const formData = new FormData();
-      const filename = imageUri.split('/').pop() || 'proof.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-      formData.append('file', { uri: imageUri, name: filename, type } as any);
+
+      if (imageUri.startsWith('data:') || imageUri.startsWith('blob:')) {
+        // Web: converte data URL / blob URL para Blob antes de enviar
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        const ext = blob.type.split('/')[1] || 'jpg';
+        formData.append('file', blob, `proof_${Date.now()}.${ext}`);
+      } else {
+        // React Native nativo: formato { uri, name, type }
+        const filename = imageUri.split('/').pop() || 'proof.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        formData.append('file', { uri: imageUri, name: filename, type } as any);
+      }
 
       await api.postForm(`/retreats/${id}/my-registration/payment`, formData);
       setSuccess(true);
