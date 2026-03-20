@@ -39,6 +39,7 @@ async def seed_database(db: Session = Depends(get_db)):
         ("ADMIN", "Administrador"),
         ("SECRETARY", "Secretário Geral"),
         ("AVISOS", "Avisos"),
+        ("ANALISTA", "Analista"),
     ]
     for code, name in roles:
         existing = db.execute(select(GlobalRole).where(GlobalRole.code == code)).scalar_one_or_none()

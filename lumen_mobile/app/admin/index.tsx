@@ -7,6 +7,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@/stores';
 
 const colors = {
   primary: '#1A859B',
@@ -29,7 +30,20 @@ interface AdminSection {
   options: AdminOption[];
 }
 
-const adminSections: AdminSection[] = [
+const dashboardSection: AdminSection = {
+  title: 'Análise',
+  options: [
+    {
+      id: 'dashboard',
+      title: 'Dashboard',
+      description: 'Métricas e visão geral do aplicativo',
+      icon: 'bar-chart',
+      route: '/admin/dashboard',
+    },
+  ],
+};
+
+const adminOnlySections: AdminSection[] = [
   {
     title: 'Comunicações',
     options: [
@@ -76,16 +90,28 @@ const adminSections: AdminSection[] = [
 ];
 
 export default function AdminMenuScreen() {
+  const { user } = useAuthStore();
+  const globalRoles = user?.global_roles ?? [];
+  const isAnalista =
+    globalRoles.includes('ANALISTA') &&
+    !globalRoles.includes('ADMIN') &&
+    !globalRoles.includes('DEV');
+
+  // ANALISTAs see only the Dashboard section; full admins see everything
+  const sectionsToShow: AdminSection[] = isAnalista
+    ? [dashboardSection]
+    : [dashboardSection, ...adminOnlySections];
+
   return (
     <>
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           title: 'Administração',
           headerStyle: { backgroundColor: colors.admin },
           headerTintColor: colors.white,
         }}
       />
-      
+
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerIconContainer}>
@@ -97,7 +123,7 @@ export default function AdminMenuScreen() {
           </Text>
         </View>
 
-        {adminSections.map((section) => (
+        {sectionsToShow.map((section) => (
           <View key={section.title}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
             {section.options.map((option) => (
@@ -120,7 +146,7 @@ export default function AdminMenuScreen() {
           </View>
         ))}
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
