@@ -203,22 +203,21 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    // Aguarda o auth store terminar de inicializar antes de checar permissão
-    if (authLoading) return;
+    if (authLoading) return;   // aguarda auth inicializar
     if (hasAccess) {
       fetchData();
     } else {
-      setLoading(false);
+      setLoading(false);       // sem permissão → para o spinner
     }
-  }, [hasAccess, authLoading]);
+  }, [authLoading, hasAccess]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  // --- Aguarda auth inicializar ---
-  if (authLoading || (loading && !data && !error)) {
+  // --- Auth ou dados carregando ---
+  if (authLoading || loading) {
     return (
       <>
         <Stack.Screen
@@ -256,25 +255,6 @@ export default function DashboardScreen() {
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Text style={styles.backBtnText}>Voltar</Text>
           </TouchableOpacity>
-        </View>
-      </>
-    );
-  }
-
-  // --- Loading ---
-  if (loading) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: 'Dashboard',
-            headerStyle: { backgroundColor: colors.admin },
-            headerTintColor: colors.white,
-          }}
-        />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.admin} />
-          <Text style={styles.loadingText}>Carregando dados...</Text>
         </View>
       </>
     );

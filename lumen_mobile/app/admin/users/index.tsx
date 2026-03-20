@@ -267,6 +267,7 @@ export default function UsersAdminScreen() {
 const GLOBAL_ADMIN_ROLES = [
   { code: 'DEV',       label: 'Dev',        color: '#1d4ed8' },
   { code: 'ADMIN',     label: 'Admin',      color: '#7c3aed' },
+  { code: 'ANALISTA',  label: 'Analista',   color: '#059669' },
   { code: 'SECRETARY', label: 'Secretário', color: '#0891b2' },
   { code: 'AVISOS',    label: 'Avisos',     color: '#d97706' },
 ];
