@@ -29,6 +29,7 @@ export default function AdminLayout() {
       <Stack.Screen name="users"        options={{ title: 'Gestão de Usuários' }} />
       <Stack.Screen name="create-aviso" options={{ title: 'Criar Aviso' }} />
       <Stack.Screen name="sent-avisos"  options={{ title: 'Avisos Enviados' }} />
+      <Stack.Screen name="audit-logs"   options={{ title: 'Logs de Auditoria' }} />
     </Stack>
   );
 }

@@ -87,6 +87,18 @@ const adminOnlySections: AdminSection[] = [
       },
     ],
   },
+  {
+    title: 'Segurança',
+    options: [
+      {
+        id: 'audit-logs',
+        title: 'Logs de Auditoria',
+        description: 'Histórico de ações realizadas no sistema',
+        icon: 'shield-checkmark-outline',
+        route: '/admin/audit-logs',
+      },
+    ],
+  },
 ];
 
 export default function AdminMenuScreen() {
