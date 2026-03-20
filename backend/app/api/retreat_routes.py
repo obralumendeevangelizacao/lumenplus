@@ -8,6 +8,7 @@ DELETE /retreats/{id}/my-registration — cancelar minha inscrição
 POST /retreats/{id}/my-registration/payment — enviar comprovante de pagamento
 """
 
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -16,6 +17,8 @@ import cloudinary.uploader
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import (
@@ -559,6 +562,14 @@ async def submit_payment_proof(
         api_secret=settings.cloudinary_api_secret,
     )
 
+    # Verifica se as credenciais do Cloudinary estão configuradas
+    if not settings.cloudinary_cloud_name or not settings.cloudinary_api_key or not settings.cloudinary_api_secret:
+        logger.error("Cloudinary credentials not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.")
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "storage_not_configured", "message": "Serviço de armazenamento não configurado. Contate o administrador."},
+        )
+
     try:
         contents = await file.read()
         upload_result = cloudinary.uploader.upload(
@@ -569,7 +580,8 @@ async def submit_payment_proof(
             resource_type="image",
         )
         url = upload_result["secure_url"]
-    except Exception:
+    except Exception as exc:
+        logger.exception("Cloudinary upload failed: %s", exc)
         raise HTTPException(status_code=502, detail={"error": "upload_failed", "message": "Falha ao enviar imagem. Tente novamente."})
 
     reg.payment_proof_url = url
