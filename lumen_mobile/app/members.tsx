@@ -140,35 +140,23 @@ export default function MembersScreen() {
   }, [searchQuery, params.org_unit_id]);
 
   const handleSendInvite = async (userId: string, userName: string) => {
-    Alert.alert(
-      'Enviar Convite',
-      `Convidar ${userName} como ${ROLE_LABELS[inviteRole]}?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Enviar',
-          onPress: async () => {
-            try {
-              setIsSendingInvite(true);
-              await api.post(`/org/units/${params.org_unit_id}/invites`, {
-                user_id: userId,
-                role: inviteRole,
-                message: inviteMessage || null,
-              });
-              Alert.alert('Sucesso!', 'Convite enviado!');
-              setSearchQuery('');
-              setSearchResults([]);
-              setInviteMessage('');
-            } catch (err: any) {
-              const message = err.response?.data?.detail?.message || 'Erro ao enviar convite';
-              Alert.alert('Erro', message);
-            } finally {
-              setIsSendingInvite(false);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      setIsSendingInvite(true);
+      await api.post(`/org/units/${params.org_unit_id}/invites`, {
+        user_id: userId,
+        role: inviteRole,
+        message: inviteMessage || null,
+      });
+      setSearchQuery('');
+      setSearchResults([]);
+      setInviteMessage('');
+      Alert.alert('Sucesso!', `Convite enviado para ${userName}!`);
+    } catch (err: any) {
+      const message = err.response?.data?.detail?.message || 'Erro ao enviar convite';
+      Alert.alert('Erro', message);
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
 
   const handlePromote = async (member: Member) => {
