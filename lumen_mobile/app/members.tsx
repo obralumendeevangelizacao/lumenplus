@@ -76,6 +76,8 @@ export default function MembersScreen() {
   
   // Modal de convite
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteStep, setInviteStep] = useState<'search' | 'confirm'>('search');
+  const [pendingUser, setPendingUser] = useState<UserSearchResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -139,24 +141,38 @@ export default function MembersScreen() {
     return () => clearTimeout(debounce);
   }, [searchQuery, params.org_unit_id]);
 
-  const handleSendInvite = async (userId: string, userName: string) => {
+  const handleSelectUser = (user: UserSearchResult) => {
+    setPendingUser(user);
+    setInviteStep('confirm');
+  };
+
+  const handleConfirmInvite = async () => {
+    if (!pendingUser) return;
     try {
       setIsSendingInvite(true);
       await api.post(`/org/units/${params.org_unit_id}/invites`, {
-        user_id: userId,
+        user_id: pendingUser.id,
         role: inviteRole,
         message: inviteMessage || null,
       });
+      setShowInvite(false);
+      setInviteStep('search');
+      setPendingUser(null);
       setSearchQuery('');
       setSearchResults([]);
       setInviteMessage('');
-      Alert.alert('Sucesso!', `Convite enviado para ${userName}!`);
+      Alert.alert('Sucesso!', `Convite enviado para ${pendingUser.name}!`);
     } catch (err: any) {
       const message = err.response?.data?.detail?.message || 'Erro ao enviar convite';
       Alert.alert('Erro', message);
     } finally {
       setIsSendingInvite(false);
     }
+  };
+
+  const handleCancelConfirm = () => {
+    setInviteStep('search');
+    setPendingUser(null);
   };
 
   const handlePromote = async (member: Member) => {
@@ -268,7 +284,7 @@ export default function MembersScreen() {
       visible={showInvite}
       animationType="slide"
       transparent
-      onRequestClose={() => setShowInvite(false)}
+      onRequestClose={() => { setShowInvite(false); setInviteStep('search'); setPendingUser(null); }}
     >
       <View style={styles.modalOverlay}>
         <ScrollView
@@ -277,12 +293,49 @@ export default function MembersScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Convidar Membro</Text>
-            <TouchableOpacity onPress={() => setShowInvite(false)}>
-              <Ionicons name="close" size={24} color={colors.gray} />
+            <TouchableOpacity onPress={inviteStep === 'confirm' ? handleCancelConfirm : () => setShowInvite(false)}>
+              <Ionicons name={inviteStep === 'confirm' ? 'arrow-back' : 'close'} size={24} color={colors.gray} />
             </TouchableOpacity>
+            <Text style={styles.modalTitle}>
+              {inviteStep === 'confirm' ? 'Confirmar Convite' : 'Convidar Membro'}
+            </Text>
+            <View style={{ width: 24 }} />
           </View>
 
+          {inviteStep === 'confirm' && pendingUser ? (
+            <View style={styles.confirmContainer}>
+              <View style={styles.confirmAvatar}>
+                <Text style={styles.confirmAvatarText}>
+                  {pendingUser.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.confirmQuestion}>
+                Convidar{'\n'}
+                <Text style={styles.confirmHighlight}>{pendingUser.name}</Text>
+                {'\n'}como{' '}
+                <Text style={styles.confirmHighlight}>{ROLE_LABELS[inviteRole]}</Text>
+                {'\n'}em{' '}
+                <Text style={styles.confirmHighlight}>{params.org_unit_name}</Text>?
+              </Text>
+              {inviteMessage ? (
+                <Text style={styles.confirmMessage}>"{inviteMessage}"</Text>
+              ) : null}
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={handleConfirmInvite}
+                disabled={isSendingInvite}
+              >
+                {isSendingInvite
+                  ? <ActivityIndicator color={colors.white} />
+                  : <Text style={styles.confirmButtonText}>Confirmar</Text>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelConfirmButton} onPress={handleCancelConfirm}>
+                <Text style={styles.cancelConfirmText}>Voltar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
           <Text style={styles.label}>Buscar usuário</Text>
           <TextInput
             style={styles.input}
@@ -302,7 +355,7 @@ export default function MembersScreen() {
                 <TouchableOpacity
                   key={user.id}
                   style={styles.searchResultItem}
-                  onPress={() => handleSendInvite(user.id, user.name)}
+                  onPress={() => handleSelectUser(user)}
                   disabled={isSendingInvite}
                 >
                   <View style={styles.searchResultAvatar}>
@@ -354,6 +407,8 @@ export default function MembersScreen() {
             numberOfLines={3}
             placeholderTextColor={colors.gray}
           />
+            </>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -508,7 +563,7 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, gap: 8 },
   modalTitle: { fontSize: 20, fontWeight: '600', color: '#171717' },
   label: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8, marginTop: 16 },
   input: { backgroundColor: colors.lightGray, borderRadius: 12, padding: 14, fontSize: 16, borderWidth: 1, borderColor: colors.border },
@@ -525,6 +580,17 @@ const styles = StyleSheet.create({
   roleOptionActive: { borderColor: colors.primary, backgroundColor: '#eff6ff' },
   roleOptionText: { fontSize: 15, fontWeight: '500', color: colors.gray },
   roleOptionTextActive: { color: colors.primary },
+  // Confirm step
+  confirmContainer: { alignItems: 'center', paddingVertical: 16, gap: 16 },
+  confirmAvatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primaryLight, justifyContent: 'center', alignItems: 'center' },
+  confirmAvatarText: { fontSize: 28, fontWeight: '700', color: colors.white },
+  confirmQuestion: { fontSize: 16, color: '#374151', textAlign: 'center', lineHeight: 26 },
+  confirmHighlight: { fontWeight: '700', color: colors.primary },
+  confirmMessage: { fontSize: 13, color: colors.gray, fontStyle: 'italic', textAlign: 'center' },
+  confirmButton: { width: '100%', backgroundColor: colors.primary, borderRadius: 12, padding: 16, alignItems: 'center' },
+  confirmButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  cancelConfirmButton: { padding: 12, alignItems: 'center' },
+  cancelConfirmText: { color: colors.gray, fontSize: 15 },
   // Actions Modal
   actionsModal: { backgroundColor: colors.white, margin: 20, borderRadius: 16, padding: 20 },
   actionsTitle: { fontSize: 18, fontWeight: '600', color: '#171717', textAlign: 'center' },
