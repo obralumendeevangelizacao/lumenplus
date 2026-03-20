@@ -91,6 +91,8 @@ interface Registration {
   payment_confirmed_at: string | null;
   payment_rejection_reason: string | null;
   created_at: string;
+  team_preferences: { team_id: string; preference_order: number }[];
+  team_assignments: { member_id: string; team_id: string; role: string; house_id: string | null }[];
 }
 
 interface EligibilityRule {
@@ -121,6 +123,23 @@ interface OrgTreeNode {
   children?: OrgTreeNode[];
 }
 
+interface ServiceTeamMember {
+  id: string;
+  registration_id: string;
+  user_id: string | null;
+  user_name: string | null;
+  role: string;
+  house_id: string | null;
+  house_name: string | null;
+}
+
+interface ServiceTeam {
+  id: string;
+  name: string;
+  description: string | null;
+  members: ServiceTeamMember[];
+}
+
 interface RetreatDetail {
   id: string;
   title: string;
@@ -138,6 +157,7 @@ interface RetreatDetail {
   fee_types: FeeType[];
   participant_eligibility_rules: EligibilityRule[];
   service_eligibility_rules: EligibilityRule[];
+  service_teams: ServiceTeam[];
 }
 
 export default function AdminRetreatDetailScreen() {
@@ -187,6 +207,15 @@ export default function AdminRetreatDetailScreen() {
   const [vocRealityItems, setVocRealityItems] = useState<VocRealityItem[]>([]);
   const [selectedVocItem, setSelectedVocItem] = useState<VocRealityItem | null>(null);
   const [catalogLoaded, setCatalogLoaded]     = useState(false);
+
+  // Service team modal
+  const [teamModal, setTeamModal] = useState<{ mode: 'create' } | { mode: 'assign'; team: ServiceTeam } | null>(null);
+  const [teamName, setTeamName]   = useState('');
+  const [teamDesc, setTeamDesc]   = useState('');
+  // Assign member to team
+  const [assignTeamRegId, setAssignTeamRegId]     = useState('');
+  const [assignTeamRole, setAssignTeamRole]       = useState<'COORDENADOR' | 'MEMBRO' | 'APOIO'>('MEMBRO');
+  const [assignTeamHouseId, setAssignTeamHouseId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -419,6 +448,67 @@ export default function AdminRetreatDetailScreen() {
       await fetchData();
     } catch (err: any) {
       setActionMsg(err?.response?.data?.detail?.message || 'Erro ao remover regra');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ---- Service teams ----
+  const handleCreateTeam = async () => {
+    if (!teamName.trim()) { setActionMsg('Informe o nome da equipe'); return; }
+    setProcessing(true);
+    try {
+      await api.post(`/admin/retreats/${id}/service-teams`, { name: teamName.trim(), description: teamDesc.trim() || null });
+      setActionMsg('Equipe criada');
+      setTeamModal(null);
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao criar equipe');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteTeam = async (teamId: string) => {
+    setProcessing(true);
+    try {
+      await api.delete(`/admin/retreats/${id}/service-teams/${teamId}`);
+      setActionMsg('Equipe removida');
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao remover equipe');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleAssignTeamMember = async (teamId: string) => {
+    if (!assignTeamRegId.trim()) { setActionMsg('Selecione uma inscrição'); return; }
+    setProcessing(true);
+    try {
+      await api.post(`/admin/retreats/${id}/service-teams/${teamId}/members`, {
+        registration_id: assignTeamRegId,
+        role: assignTeamRole,
+        house_id: assignTeamHouseId || null,
+      });
+      setActionMsg('Membro atribuído');
+      setTeamModal(null);
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao atribuir membro');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRemoveTeamMember = async (teamId: string, memberId: string) => {
+    setProcessing(true);
+    try {
+      await api.delete(`/admin/retreats/${id}/service-teams/${teamId}/members/${memberId}`);
+      setActionMsg('Membro removido');
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao remover membro');
     } finally {
       setProcessing(false);
     }
@@ -675,6 +765,89 @@ export default function AdminRetreatDetailScreen() {
       ) : (
         retreat.service_eligibility_rules.map(rule => (
           <EligibilityRuleRow key={rule.id} rule={rule} onDelete={() => handleDeleteEligibilityRule(rule.id)} />
+        ))
+      )}
+
+      {/* ── Equipes de Serviço ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Equipes de Serviço ({(retreat.service_teams || []).length})
+        </Text>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => { setTeamName(''); setTeamDesc(''); setTeamModal({ mode: 'create' }); }}
+        >
+          <Ionicons name="add" size={16} color={colors.primary} />
+          <Text style={styles.addBtnText}>Nova equipe</Text>
+        </TouchableOpacity>
+      </View>
+
+      {(retreat.service_teams || []).length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>Nenhuma equipe cadastrada</Text>
+        </View>
+      ) : (
+        (retreat.service_teams || []).map(team => (
+          <View key={team.id} style={styles.houseCard}>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.houseName}>{team.name}</Text>
+                {team.description ? (
+                  <Text style={styles.houseCapacity}>{team.description}</Text>
+                ) : null}
+                <Text style={[styles.houseCapacity, { marginTop: 4 }]}>
+                  {team.members.length} membro{team.members.length !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <View style={styles.houseActions}>
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  onPress={() => {
+                    setAssignTeamRegId('');
+                    setAssignTeamRole('MEMBRO');
+                    setAssignTeamHouseId(null);
+                    setTeamModal({ mode: 'assign', team });
+                  }}
+                >
+                  <Ionicons name="person-add-outline" size={16} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.iconBtn}
+                  onPress={() => setConfirmModal({
+                    title: `Remover equipe "${team.name}"?`,
+                    body: 'Todos os membros desta equipe serão desatribuídos.',
+                    action: async () => { setConfirmModal(null); await handleDeleteTeam(team.id); },
+                  })}
+                >
+                  <Ionicons name="trash-outline" size={16} color={colors.red} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Membros da equipe */}
+            {team.members.length > 0 && (
+              <View style={{ marginTop: 8, gap: 4 }}>
+                {team.members.map(m => (
+                  <View key={m.id} style={[styles.row, { paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#f3f4f6' }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: '#374151', fontWeight: '600' }}>
+                        {m.user_name || 'Membro'}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: colors.gray }}>
+                        {m.role}{m.house_name ? ` · ${m.house_name}` : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.iconBtn}
+                      onPress={() => handleRemoveTeamMember(team.id, m.id)}
+                    >
+                      <Ionicons name="close-circle-outline" size={16} color={colors.red} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
         ))
       )}
 
@@ -1040,6 +1213,134 @@ export default function AdminRetreatDetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* ── Modal: criar equipe ── */}
+      <Modal visible={teamModal?.mode === 'create'} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Nova Equipe de Serviço</Text>
+            <Text style={styles.fieldLabel}>Nome da equipe *</Text>
+            <TextInput
+              style={styles.input}
+              value={teamName}
+              onChangeText={setTeamName}
+              placeholder="Ex: Louvor, Acolhida, Cozinha..."
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.fieldLabel}>Descrição (opcional)</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
+              value={teamDesc}
+              onChangeText={setTeamDesc}
+              placeholder="Responsabilidades desta equipe..."
+              placeholderTextColor="#9ca3af"
+              multiline
+            />
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setTeamModal(null)}>
+                <Text style={styles.outlineBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleCreateTeam} disabled={processing}>
+                {processing
+                  ? <ActivityIndicator color={colors.white} size="small" />
+                  : <Text style={styles.confirmBtnText}>Criar</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Modal: atribuir membro à equipe ── */}
+      <Modal visible={teamModal?.mode === 'assign'} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <ScrollView style={{ width: '100%' }} contentContainerStyle={{ paddingVertical: 20, paddingHorizontal: 4 }}>
+            <View style={[styles.modalBox, { marginHorizontal: 0 }]}>
+              {teamModal?.mode === 'assign' && (
+                <Text style={styles.modalTitle}>Atribuir a "{teamModal.team.name}"</Text>
+              )}
+
+              <Text style={styles.fieldLabel}>Papel na equipe</Text>
+              <View style={styles.modalitySelector}>
+                {(['COORDENADOR', 'MEMBRO', 'APOIO'] as const).map(r => (
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.modalityOption, assignTeamRole === r && styles.modalityOptionSelected]}
+                    onPress={() => setAssignTeamRole(r)}
+                  >
+                    <Text style={[styles.modalityOptionText, assignTeamRole === r && { color: colors.white }]}>
+                      {r === 'COORDENADOR' ? 'Coord.' : r === 'MEMBRO' ? 'Membro' : 'Apoio'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Sub-equipe (casa — opcional)</Text>
+              <TouchableOpacity
+                style={[styles.houseOption, assignTeamHouseId === null && { borderColor: '#9ca3af' }]}
+                onPress={() => setAssignTeamHouseId(null)}
+              >
+                <Text style={[styles.houseOptionText, assignTeamHouseId === null && { color: '#9ca3af' }]}>
+                  Sem casa específica
+                </Text>
+              </TouchableOpacity>
+              {retreat.houses.map(house => (
+                <TouchableOpacity
+                  key={house.id}
+                  style={[styles.houseOption, assignTeamHouseId === house.id && styles.houseOptionActive]}
+                  onPress={() => setAssignTeamHouseId(house.id)}
+                >
+                  <Ionicons name="home-outline" size={16} color={assignTeamHouseId === house.id ? colors.white : colors.primary} />
+                  <Text style={[styles.houseOptionText, assignTeamHouseId === house.id && { color: colors.white }]}>
+                    {house.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <Text style={styles.fieldLabel}>Inscrição (escolha da lista)</Text>
+              <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                {regs
+                  .filter(r => r.status !== 'CANCELLED' && r.retreat_role === 'EQUIPE_SERVICO')
+                  .map(r => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.houseOption, assignTeamRegId === r.id && styles.houseOptionActive]}
+                      onPress={() => setAssignTeamRegId(r.id)}
+                    >
+                      <Text style={[styles.houseOptionText, assignTeamRegId === r.id && { color: colors.white }]}>
+                        {r.user_name || 'Membro'}
+                      </Text>
+                      {r.team_preferences && r.team_preferences.length > 0 && (
+                        <Text style={[styles.houseOptionSub, assignTeamRegId === r.id && { color: '#e9d5ff' }]}>
+                          Preferências: {r.team_preferences.map((p: any) => p.preference_order).join(', ')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+              </ScrollView>
+              {regs.filter(r => r.status !== 'CANCELLED' && r.retreat_role === 'EQUIPE_SERVICO').length === 0 && (
+                <Text style={styles.emptyText}>Nenhuma inscrição de Equipe de Serviço</Text>
+              )}
+
+              <View style={styles.modalRow}>
+                <TouchableOpacity style={styles.outlineBtn} onPress={() => setTeamModal(null)}>
+                  <Text style={styles.outlineBtnText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmBtn}
+                  onPress={() => teamModal?.mode === 'assign' && handleAssignTeamMember(teamModal.team.id)}
+                  disabled={processing}
+                >
+                  {processing
+                    ? <ActivityIndicator color={colors.white} size="small" />
+                    : <Text style={styles.confirmBtnText}>Atribuir</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 

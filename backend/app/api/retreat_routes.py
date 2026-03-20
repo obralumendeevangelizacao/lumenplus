@@ -28,6 +28,8 @@ from app.db.models import (
     RetreatFeeType,
     RetreatHouse,
     RetreatRegistration,
+    RetreatServiceTeam,
+    RetreatTeamPreference,
     RetreatStatus,
     RetreatVisibilityType,
     RegistrationStatus,
@@ -347,10 +349,31 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
     return _retreat_to_dict(retreat, reg, user_fee, as_participant, as_service)
 
 
+@router.get("/{retreat_id}/service-teams")
+async def list_retreat_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+    """Lista equipes de serviço disponíveis para o inscrito escolher suas preferências."""
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat or retreat.status not in (RetreatStatus.PUBLISHED, RetreatStatus.CLOSED):
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    teams = db.execute(
+        select(RetreatServiceTeam).where(RetreatServiceTeam.retreat_id == retreat_id)
+    ).scalars().all()
+    result = []
+    for team in teams:
+        result.append({
+            "id": str(team.id),
+            "name": team.name,
+            "description": team.description,
+            "member_count": len(team.members or []),
+        })
+    return {"service_teams": result}
+
+
 class RegisterBody(BaseModel):
     notes: str | None = None
     modality_preference: str | None = None   # PRESENCIAL | HIBRIDO
     registration_type: str = "PARTICIPANT"    # PARTICIPANT | SERVICE
+    team_preferences: list[UUID] = []         # máx 3, em ordem de preferência (apenas SERVICE)
 
 
 @router.post("/{retreat_id}/register", status_code=201)
@@ -433,6 +456,32 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
     db.commit()
     db.refresh(reg)
 
+    # Salva preferências de equipe (apenas SERVICE, máx 3)
+    if body.registration_type == "SERVICE" and body.team_preferences:
+        prefs_to_save = body.team_preferences[:3]
+        # Remove preferências anteriores desta inscrição
+        old_prefs = db.execute(
+            select(RetreatTeamPreference).where(RetreatTeamPreference.registration_id == reg.id)
+        ).scalars().all()
+        for old_p in old_prefs:
+            db.delete(old_p)
+        db.flush()
+        # Valida e persiste as novas preferências
+        for order, team_id in enumerate(prefs_to_save, start=1):
+            team = db.get(RetreatServiceTeam, team_id)
+            if not team or team.retreat_id != retreat_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": "invalid_team", "message": f"Equipe {team_id} não pertence a este retiro"},
+                )
+            db.add(RetreatTeamPreference(
+                registration_id=reg.id,
+                team_id=team_id,
+                preference_order=order,
+            ))
+        db.commit()
+        db.refresh(reg)
+
     # Descobre valor da taxa
     fee_type = db.execute(
         select(RetreatFeeType).where(
@@ -448,6 +497,10 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
         "fee_category": reg.fee_category,
         "fee_label": FEE_CATEGORY_LABELS.get(fee_category, fee_category),
         "amount_brl": fee_type.amount_brl if fee_type else None,
+        "team_preferences": [
+            {"team_id": str(p.team_id), "preference_order": p.preference_order}
+            for p in sorted(reg.team_preferences or [], key=lambda p: p.preference_order)
+        ],
         "message": (
             "Inscrição realizada com sucesso"
             if status != RegistrationStatus.WAITLIST

@@ -778,6 +778,12 @@ class RegistrationStatus(enum.Enum):
     WAITLIST = "WAITLIST"
 
 
+class ServiceTeamRole(enum.Enum):
+    COORDENADOR = "COORDENADOR"
+    MEMBRO = "MEMBRO"
+    APOIO = "APOIO"
+
+
 class Retreat(Base):
     __tablename__ = "retreats"
 
@@ -826,6 +832,9 @@ class Retreat(Base):
     )
     fee_types: Mapped[list["RetreatFeeType"]] = relationship(
         "RetreatFeeType", back_populates="retreat", cascade="all, delete-orphan"
+    )
+    service_teams: Mapped[list["RetreatServiceTeam"]] = relationship(
+        "RetreatServiceTeam", back_populates="retreat", cascade="all, delete-orphan", lazy="selectin"
     )
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
 
@@ -911,6 +920,14 @@ class RetreatRegistration(Base):
     )
     cancelled_by: Mapped["User | None"] = relationship("User", foreign_keys=[cancelled_by_user_id])
     assigned_house: Mapped["RetreatHouse | None"] = relationship("RetreatHouse", foreign_keys=[assigned_house_id])
+    team_preferences: Mapped[list["RetreatTeamPreference"]] = relationship(
+        "RetreatTeamPreference", back_populates="registration",
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+    team_assignment_entries: Mapped[list["RetreatServiceTeamMember"]] = relationship(
+        "RetreatServiceTeamMember", back_populates="registration",
+        cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class RetreatHouse(Base):
@@ -944,3 +961,88 @@ class RetreatFeeType(Base):
     __table_args__ = (UniqueConstraint("retreat_id", "fee_category", name="uq_retreat_fee_category"),)
 
     retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="fee_types")
+
+
+class RetreatServiceTeam(Base):
+    __tablename__ = "retreat_service_teams"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="service_teams")
+    members: Mapped[list["RetreatServiceTeamMember"]] = relationship(
+        "RetreatServiceTeamMember", back_populates="team",
+        cascade="all, delete-orphan", lazy="selectin"
+    )
+    preferences: Mapped[list["RetreatTeamPreference"]] = relationship(
+        "RetreatTeamPreference", back_populates="team", cascade="all, delete-orphan"
+    )
+
+
+class RetreatServiceTeamMember(Base):
+    __tablename__ = "retreat_service_team_members"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    team_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_service_teams.id", ondelete="CASCADE"), nullable=False
+    )
+    registration_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_registrations.id", ondelete="CASCADE"), nullable=False
+    )
+    house_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_houses.id", ondelete="SET NULL"), nullable=True
+    )
+    role: Mapped[ServiceTeamRole] = mapped_column(
+        Enum(ServiceTeamRole, name="service_team_role", create_constraint=False),
+        nullable=False,
+        default=ServiceTeamRole.MEMBRO,
+        server_default="MEMBRO",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("team_id", "registration_id", name="uq_team_member_registration"),
+    )
+
+    team: Mapped["RetreatServiceTeam"] = relationship("RetreatServiceTeam", back_populates="members")
+    registration: Mapped["RetreatRegistration"] = relationship(
+        "RetreatRegistration", back_populates="team_assignment_entries"
+    )
+    house: Mapped["RetreatHouse | None"] = relationship("RetreatHouse")
+
+
+class RetreatTeamPreference(Base):
+    __tablename__ = "retreat_team_preferences"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    registration_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_registrations.id", ondelete="CASCADE"), nullable=False
+    )
+    team_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_service_teams.id", ondelete="CASCADE"), nullable=False
+    )
+    preference_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("registration_id", "team_id", name="uq_team_preference_reg_team"),
+        UniqueConstraint("registration_id", "preference_order", name="uq_team_preference_reg_order"),
+    )
+
+    registration: Mapped["RetreatRegistration"] = relationship(
+        "RetreatRegistration", back_populates="team_preferences"
+    )
+    team: Mapped["RetreatServiceTeam"] = relationship(
+        "RetreatServiceTeam", back_populates="preferences"
+    )

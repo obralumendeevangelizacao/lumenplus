@@ -66,6 +66,13 @@ interface FeeTypeEntry {
   amount_brl: string;
 }
 
+interface ServiceTeamOption {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+}
+
 interface FeeInfo {
   fee_category: string;
   fee_label: string;
@@ -118,6 +125,10 @@ export default function RetreatDetailScreen() {
   const [submitting, setSubmitting]               = useState(false);
   const [actionMsg, setActionMsg]                 = useState<string | null>(null);
 
+  // Preferências de equipe de serviço
+  const [serviceTeams, setServiceTeams]           = useState<ServiceTeamOption[]>([]);
+  const [teamPreferences, setTeamPreferences]     = useState<string[]>([]); // máx 3 IDs, em ordem
+
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const fetchRetreat = async () => {
@@ -143,11 +154,20 @@ export default function RetreatDetailScreen() {
     setRefreshing(false);
   };
 
-  const openRegModal = (type: 'PARTICIPANT' | 'SERVICE') => {
+  const openRegModal = async (type: 'PARTICIPANT' | 'SERVICE') => {
     const modalities = retreat?.available_modalities ?? [];
     setSelectedModality(modalities.length === 1 ? modalities[0] : null);
     setRegistrationType(type);
     setNotes('');
+    setTeamPreferences([]);
+    if (type === 'SERVICE') {
+      try {
+        const res = await api.get<{ service_teams: ServiceTeamOption[] }>(`/retreats/${id}/service-teams`);
+        setServiceTeams(res.service_teams || []);
+      } catch {
+        setServiceTeams([]);
+      }
+    }
     setShowRegModal(true);
   };
 
@@ -166,6 +186,7 @@ export default function RetreatDetailScreen() {
           notes: notes || null,
           modality_preference: selectedModality ?? (modalities[0] || null),
           registration_type: registrationType,
+          team_preferences: registrationType === 'SERVICE' ? teamPreferences : [],
         }
       );
       setActionMsg(res.message);
@@ -420,6 +441,54 @@ export default function RetreatDetailScreen() {
               </View>
             )}
 
+            {/* Preferências de equipe — apenas SERVICE */}
+            {registrationType === 'SERVICE' && serviceTeams.length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <Text style={styles.fieldLabel}>
+                  Preferências de equipe ({teamPreferences.length}/3)
+                </Text>
+                <Text style={[styles.fieldLabel, { fontWeight: '400', color: colors.gray, fontSize: 12, marginBottom: 6 }]}>
+                  Toque para escolher até 3 equipes em ordem de interesse.
+                </Text>
+                {serviceTeams.map(team => {
+                  const prefIdx = teamPreferences.indexOf(team.id);
+                  const selected = prefIdx !== -1;
+                  return (
+                    <TouchableOpacity
+                      key={team.id}
+                      style={[
+                        styles.teamOption,
+                        selected && styles.teamOptionSelected,
+                      ]}
+                      onPress={() => {
+                        if (selected) {
+                          setTeamPreferences(prev => prev.filter(tid => tid !== team.id));
+                        } else if (teamPreferences.length < 3) {
+                          setTeamPreferences(prev => [...prev, team.id]);
+                        }
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.teamOptionName, selected && { color: colors.white }]}>
+                          {team.name}
+                        </Text>
+                        {team.description ? (
+                          <Text style={[styles.teamOptionDesc, selected && { color: '#e0f2fe' }]}>
+                            {team.description}
+                          </Text>
+                        ) : null}
+                      </View>
+                      {selected && (
+                        <View style={styles.teamOrderBadge}>
+                          <Text style={styles.teamOrderText}>{prefIdx + 1}º</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
             <Text style={styles.fieldLabel}>Observações (opcional)</Text>
             <TextInput
               style={styles.textArea}
@@ -575,4 +644,17 @@ const styles = StyleSheet.create({
     padding: 12, alignItems: 'center', justifyContent: 'center',
   },
   confirmBtnText: { fontSize: 14, fontWeight: '700', color: colors.white },
+  // Team preference selector
+  teamOption: {
+    borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12,
+    padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10,
+  },
+  teamOptionSelected: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  teamOptionName: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  teamOptionDesc: { fontSize: 12, color: colors.gray, marginTop: 2 },
+  teamOrderBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
+  },
+  teamOrderText: { fontSize: 13, fontWeight: '800', color: colors.white },
 });

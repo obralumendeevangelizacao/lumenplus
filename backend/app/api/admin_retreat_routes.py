@@ -43,10 +43,14 @@ from app.db.models import (
     RetreatFeeType,
     RetreatHouse,
     RetreatRegistration,
+    RetreatServiceTeam,
+    RetreatServiceTeamMember,
+    RetreatTeamPreference,
     RetreatStatus,
     RetreatType,
     RetreatVisibilityType,
     RegistrationStatus,
+    ServiceTeamRole,
     User,
     UserGlobalRole,
     UserPermission,
@@ -122,6 +126,32 @@ def _fee_types_to_list(fee_types) -> list[dict]:
     ]
 
 
+def _service_teams_to_list(teams) -> list[dict]:
+    result = []
+    for team in (teams or []):
+        members = []
+        for m in (team.members or []):
+            reg = m.registration
+            members.append({
+                "id": str(m.id),
+                "registration_id": str(m.registration_id),
+                "user_id": str(reg.user_id) if reg else None,
+                "user_name": (reg.user.profile.full_name if reg and reg.user and hasattr(reg.user, "profile") else None),
+                "role": m.role.value,
+                "house_id": str(m.house_id) if m.house_id else None,
+                "house_name": m.house.name if m.house else None,
+                "created_at": m.created_at.isoformat(),
+            })
+        result.append({
+            "id": str(team.id),
+            "name": team.name,
+            "description": team.description,
+            "members": members,
+            "created_at": team.created_at.isoformat(),
+        })
+    return result
+
+
 def _rule_to_dict(r) -> dict:
     return {
         "id": str(r.id),
@@ -154,6 +184,7 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
         "service_eligibility_rules": service_rules,
         "houses": _houses_to_list(retreat.houses),
         "fee_types": _fee_types_to_list(retreat.fee_types),
+        "service_teams": _service_teams_to_list(retreat.service_teams),
         "created_by_user_id": str(retreat.created_by_user_id) if retreat.created_by_user_id else None,
         "created_at": retreat.created_at.isoformat(),
         "updated_at": retreat.updated_at.isoformat(),
@@ -299,6 +330,28 @@ class AssignHouseBody(BaseModel):
 
 class SetRoleBody(BaseModel):
     retreat_role: str  # PARTICIPANTE | EQUIPE_SERVICO
+
+
+class CreateServiceTeamBody(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class PatchServiceTeamBody(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class AssignTeamMemberBody(BaseModel):
+    registration_id: UUID
+    role: str = "MEMBRO"   # COORDENADOR | MEMBRO | APOIO
+    house_id: UUID | None = None
+
+
+class PatchTeamMemberBody(BaseModel):
+    role: str | None = None
+    house_id: UUID | None = None
+
 
 
 # ---------------------------------------------------------------------------
@@ -648,6 +701,16 @@ async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DB
             select(UserProfile).where(UserProfile.user_id == reg.user_id)
         ).scalar_one_or_none()
         house = db.get(RetreatHouse, reg.assigned_house_id) if reg.assigned_house_id else None
+        team_prefs = sorted(reg.team_preferences or [], key=lambda p: p.preference_order)
+        team_assignments = [
+            {
+                "member_id": str(m.id),
+                "team_id": str(m.team_id),
+                "role": m.role.value,
+                "house_id": str(m.house_id) if m.house_id else None,
+            }
+            for m in (reg.team_assignment_entries or [])
+        ]
         items.append({
             "id": str(reg.id),
             "user_id": str(reg.user_id),
@@ -665,6 +728,11 @@ async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DB
             "payment_confirmed_at": reg.payment_confirmed_at.isoformat() if reg.payment_confirmed_at else None,
             "payment_rejection_reason": reg.payment_rejection_reason,
             "created_at": reg.created_at.isoformat(),
+            "team_preferences": [
+                {"team_id": str(p.team_id), "preference_order": p.preference_order}
+                for p in team_prefs
+            ],
+            "team_assignments": team_assignments,
         })
 
     return {"total": len(items), "registrations": items}
@@ -781,6 +849,173 @@ def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None
     if "CV" in voc or "COMUNIDADE" in voc or "VIDA" in voc:
         return f"{prefix}_CV"
     return prefix
+
+
+# ---------------------------------------------------------------------------
+# Equipes de Serviço
+# ---------------------------------------------------------------------------
+
+@router.post("/{retreat_id}/service-teams", status_code=201)
+async def create_service_team(
+    retreat_id: UUID,
+    body: CreateServiceTeamBody,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    _require_retreat_manager(db, current_user.id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    team = RetreatServiceTeam(retreat_id=retreat_id, name=body.name.strip(), description=body.description)
+    db.add(team)
+    db.commit()
+    db.refresh(team)
+    return {"id": str(team.id), "name": team.name, "description": team.description, "members": [], "created_at": team.created_at.isoformat()}
+
+
+@router.get("/{retreat_id}/service-teams")
+async def list_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+    _require_retreat_manager(db, current_user.id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    teams = db.execute(
+        select(RetreatServiceTeam).where(RetreatServiceTeam.retreat_id == retreat_id)
+    ).scalars().all()
+    return {"service_teams": _service_teams_to_list(teams)}
+
+
+@router.put("/{retreat_id}/service-teams/{team_id}")
+async def update_service_team(
+    retreat_id: UUID,
+    team_id: UUID,
+    body: PatchServiceTeamBody,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    _require_retreat_manager(db, current_user.id)
+    team = db.get(RetreatServiceTeam, team_id)
+    if not team or team.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
+    if body.name is not None:
+        team.name = body.name.strip()
+    if body.description is not None:
+        team.description = body.description
+    db.commit()
+    db.refresh(team)
+    return {"id": str(team.id), "name": team.name, "description": team.description, "created_at": team.created_at.isoformat()}
+
+
+@router.delete("/{retreat_id}/service-teams/{team_id}", status_code=200)
+async def delete_service_team(retreat_id: UUID, team_id: UUID, current_user: CurrentUser, db: DBSession):
+    _require_retreat_manager(db, current_user.id)
+    team = db.get(RetreatServiceTeam, team_id)
+    if not team or team.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
+    db.delete(team)
+    db.commit()
+    return {"message": "Equipe removida"}
+
+
+@router.post("/{retreat_id}/service-teams/{team_id}/members", status_code=201)
+async def assign_team_member(
+    retreat_id: UUID,
+    team_id: UUID,
+    body: AssignTeamMemberBody,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    _require_retreat_manager(db, current_user.id)
+    team = db.get(RetreatServiceTeam, team_id)
+    if not team or team.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
+    reg = db.get(RetreatRegistration, body.registration_id)
+    if not reg or reg.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada neste retiro"})
+    try:
+        role = ServiceTeamRole(body.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"error": "invalid_role", "message": "Role deve ser COORDENADOR, MEMBRO ou APOIO"})
+    if body.house_id is not None:
+        house = db.get(RetreatHouse, body.house_id)
+        if not house or house.retreat_id != retreat_id:
+            raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada neste retiro"})
+    existing = db.execute(
+        select(RetreatServiceTeamMember).where(
+            RetreatServiceTeamMember.team_id == team_id,
+            RetreatServiceTeamMember.registration_id == body.registration_id,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail={"error": "already_member", "message": "Inscrição já é membro desta equipe"})
+    member = RetreatServiceTeamMember(
+        team_id=team_id,
+        registration_id=body.registration_id,
+        role=role,
+        house_id=body.house_id,
+    )
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return {
+        "id": str(member.id),
+        "team_id": str(member.team_id),
+        "registration_id": str(member.registration_id),
+        "role": member.role.value,
+        "house_id": str(member.house_id) if member.house_id else None,
+        "created_at": member.created_at.isoformat(),
+    }
+
+
+@router.patch("/{retreat_id}/service-teams/{team_id}/members/{member_id}")
+async def patch_team_member(
+    retreat_id: UUID,
+    team_id: UUID,
+    member_id: UUID,
+    body: PatchTeamMemberBody,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    _require_retreat_manager(db, current_user.id)
+    team = db.get(RetreatServiceTeam, team_id)
+    if not team or team.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
+    member = db.get(RetreatServiceTeamMember, member_id)
+    if not member or member.team_id != team_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Membro não encontrado"})
+    if body.role is not None:
+        try:
+            member.role = ServiceTeamRole(body.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"error": "invalid_role", "message": "Role deve ser COORDENADOR, MEMBRO ou APOIO"})
+    if "house_id" in body.model_fields_set:
+        if body.house_id is not None:
+            house = db.get(RetreatHouse, body.house_id)
+            if not house or house.retreat_id != retreat_id:
+                raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada neste retiro"})
+        member.house_id = body.house_id
+    db.commit()
+    return {"id": str(member.id), "role": member.role.value, "house_id": str(member.house_id) if member.house_id else None}
+
+
+@router.delete("/{retreat_id}/service-teams/{team_id}/members/{member_id}", status_code=200)
+async def remove_team_member(
+    retreat_id: UUID,
+    team_id: UUID,
+    member_id: UUID,
+    current_user: CurrentUser,
+    db: DBSession,
+):
+    _require_retreat_manager(db, current_user.id)
+    team = db.get(RetreatServiceTeam, team_id)
+    if not team or team.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Equipe não encontrada"})
+    member = db.get(RetreatServiceTeamMember, member_id)
+    if not member or member.team_id != team_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Membro não encontrado"})
+    db.delete(member)
+    db.commit()
+    return {"message": "Membro removido da equipe"}
 
 
 # ---------------------------------------------------------------------------
