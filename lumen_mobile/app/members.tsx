@@ -88,6 +88,9 @@ export default function MembersScreen() {
   // Modal de ações do membro
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showMemberActions, setShowMemberActions] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<Member | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -204,29 +207,26 @@ export default function MembersScreen() {
     );
   };
 
-  const handleRemove = async (member: Member) => {
-    Alert.alert(
-      'Remover Membro',
-      `Deseja remover ${member.user_name} da unidade?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await api.delete(`/org/units/${params.org_unit_id}/members/${member.user_id}`);
-              Alert.alert('Sucesso!', 'Membro removido');
-              setShowMemberActions(false);
-              loadData();
-            } catch (err: any) {
-              const message = err.response?.data?.detail?.message || 'Erro ao remover membro';
-              Alert.alert('Erro', message);
-            }
-          },
-        },
-      ]
-    );
+  const handleRemovePress = (member: Member) => {
+    setMemberToRemove(member);
+    setShowMemberActions(false);
+    setShowRemoveConfirm(true);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!memberToRemove) return;
+    try {
+      setIsRemoving(true);
+      await api.delete(`/org/units/${params.org_unit_id}/members/${memberToRemove.user_id}`);
+      setShowRemoveConfirm(false);
+      setMemberToRemove(null);
+      loadData();
+    } catch (err: any) {
+      const message = err.response?.data?.detail?.message || 'Erro ao remover membro';
+      Alert.alert('Erro', message);
+    } finally {
+      setIsRemoving(false);
+    }
   };
 
   const formatDate = (dateStr: string) => {
@@ -451,7 +451,7 @@ export default function MembersScreen() {
 
             <TouchableOpacity
               style={[styles.actionButton, styles.actionButtonDanger]}
-              onPress={() => handleRemove(selectedMember)}
+              onPress={() => handleRemovePress(selectedMember)}
             >
               <Ionicons name="person-remove" size={20} color={colors.error} />
               <Text style={[styles.actionButtonText, styles.actionButtonTextDanger]}>
@@ -533,6 +533,46 @@ export default function MembersScreen() {
 
       {renderInviteModal()}
       {renderMemberActionsModal()}
+
+      {/* Modal de confirmação de remoção */}
+      <Modal
+        visible={showRemoveConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => { setShowRemoveConfirm(false); setMemberToRemove(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.actionsModal}>
+            <View style={[styles.confirmAvatar, { backgroundColor: '#fef2f2' }]}>
+              <Ionicons name="person-remove" size={28} color={colors.error} />
+            </View>
+            <Text style={[styles.actionsTitle, { marginTop: 12 }]}>Remover Membro</Text>
+            <Text style={{ textAlign: 'center', color: '#374151', marginTop: 8, marginBottom: 20, lineHeight: 22 }}>
+              Deseja remover{' '}
+              <Text style={{ fontWeight: '700' }}>{memberToRemove?.user_name}</Text>
+              {' '}de{' '}
+              <Text style={{ fontWeight: '700' }}>{params.org_unit_name}</Text>?
+              {'\n'}Esta ação não pode ser desfeita.
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmButton, { backgroundColor: colors.error }]}
+              onPress={handleConfirmRemove}
+              disabled={isRemoving}
+            >
+              {isRemoving
+                ? <ActivityIndicator color={colors.white} />
+                : <Text style={styles.confirmButtonText}>Remover</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelConfirmButton}
+              onPress={() => { setShowRemoveConfirm(false); setMemberToRemove(null); }}
+            >
+              <Text style={styles.cancelConfirmText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

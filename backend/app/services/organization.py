@@ -16,6 +16,7 @@ from app.db.models import (
     OrgMembership, MembershipStatus, OrgRoleCode,
     OrgInvite, InviteStatus,
     User, UserGlobalRole, GlobalRole,
+    AuditLog,
 )
 from app.core.settings import settings
 from app.schemas.organization import HIERARCHY_PERMISSIONS, GROUP_TYPES
@@ -631,7 +632,19 @@ def update_member_role(
                 "Você é o único coordenador. Promova outro membro antes de se rebaixar."
             )
     
+    old_role = membership.role
     membership.role = new_role
+    db.add(AuditLog(
+        actor_user_id=acting_user_id,
+        action="member_role_updated",
+        entity_type="org_unit",
+        entity_id=str(org_unit_id),
+        extra_data={
+            "target_user_id": str(target_user_id),
+            "old_role": old_role.value,
+            "new_role": new_role.value,
+        },
+    ))
     db.commit()
     db.refresh(membership)
     return membership
@@ -666,8 +679,15 @@ def remove_member(
     # Verifica permissão
     is_self = target_user_id == acting_user_id
     is_coord = is_coordinator_of(db, acting_user_id, org_unit_id)
-    
-    if not is_self and not is_coord:
+
+    # Coordenador da entidade pai também pode remover
+    unit = db.get(OrgUnit, org_unit_id)
+    is_parent_coord = (
+        is_coordinator_of(db, acting_user_id, unit.parent_id)
+        if unit and unit.parent_id else False
+    )
+
+    if not is_self and not is_coord and not is_parent_coord:
         raise OrgServiceError("permission_denied", "Você não tem permissão para remover este membro")
     
     # Se é coordenador sendo removido, verifica se há outros
@@ -688,8 +708,19 @@ def remove_member(
             )
     
     # Marca como removido (soft delete)
-    # Nota: OrgMembership não tem coluna left_at — o status REMOVED é suficiente.
     membership.status = MembershipStatus.REMOVED
+    db.add(AuditLog(
+        actor_user_id=acting_user_id,
+        action="member_removed",
+        entity_type="org_unit",
+        entity_id=str(org_unit_id),
+        extra_data={
+            "removed_user_id": str(target_user_id),
+            "removed_role": membership.role.value,
+            "is_self_removal": is_self,
+            "removed_by_parent_coord": is_parent_coord,
+        },
+    ))
     db.commit()
 
 
@@ -705,21 +736,27 @@ def get_user_permissions(db: Session, user_id: UUID, org_unit_id: UUID) -> dict:
     is_memb = is_member_of(db, user_id, org_unit_id)
     global_roles = get_user_global_roles(db, user_id)
     is_admin = "ADMIN" in global_roles or "DEV" in global_roles
-    
+
+    # Coordenador da entidade pai também pode gerenciar membros desta entidade
+    is_parent_coord = (
+        is_coordinator_of(db, user_id, org_unit.parent_id)
+        if org_unit.parent_id else False
+    )
+
     # Verifica o que pode criar
     can_create = []
     if is_coord or is_admin:
         permissions = HIERARCHY_PERMISSIONS.get(org_unit.type.value, {})
         can_create = permissions.get("can_create", [])
-    
+
     return {
         "can_view": org_unit.visibility == Visibility.PUBLIC or is_memb or is_admin,
         "can_view_members": org_unit.visibility == Visibility.PUBLIC or is_memb or is_admin,
-        "can_invite": is_coord or is_admin,
+        "can_invite": is_coord or is_parent_coord or is_admin,
         "can_create_child": len(can_create) > 0,
         "allowed_child_types": can_create,
         "can_edit": is_coord or is_admin,
-        "can_manage_members": is_coord or is_admin,
+        "can_manage_members": is_coord or is_parent_coord or is_admin,
         "is_coordinator": is_coord,
         "is_member": is_memb,
         "is_admin": is_admin,
