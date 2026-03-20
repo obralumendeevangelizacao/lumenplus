@@ -19,6 +19,7 @@ const colors = {
   success: '#22c55e',
   warning: '#f59e0b',
   admin: '#7c3aed',
+  coord: '#059669',
 };
 
 interface Aviso {
@@ -36,6 +37,7 @@ export default function HomeScreen() {
   const [avisosNaoLidos, setAvisosNaoLidos] = useState<Aviso[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [isCoordinator, setIsCoordinator] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -67,6 +69,17 @@ export default function HomeScreen() {
         setHasAdminAccess(permResponse.has_admin_access || false);
       } catch {
         setHasAdminAccess(false);
+      }
+
+      // Verificar se é coordenador de alguma unidade
+      try {
+        const memberships = await api.get<{ role: string; status: string }[]>('/org/my/memberships');
+        const hasCoord = memberships.some(
+          (m) => m.role === 'COORDINATOR' && m.status === 'ACTIVE'
+        );
+        setIsCoordinator(hasCoord);
+      } catch {
+        setIsCoordinator(false);
       }
 
       // Carregar avisos não lidos
@@ -151,6 +164,23 @@ export default function HomeScreen() {
             <Text style={styles.adminSubtitle}>Entidades, membros e comunicações</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.admin} />
+        </TouchableOpacity>
+      )}
+
+      {/* Coordinator Button */}
+      {isCoordinator && !hasAdminAccess && (
+        <TouchableOpacity
+          style={styles.coordButton}
+          onPress={() => router.push('/coordinator')}
+        >
+          <View style={styles.coordIconContainer}>
+            <Ionicons name="ribbon" size={24} color={colors.white} />
+          </View>
+          <View style={styles.adminTextContainer}>
+            <Text style={styles.coordTitle}>Minha Coordenação</Text>
+            <Text style={styles.adminSubtitle}>Membros e convites da sua unidade</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={colors.coord} />
         </TouchableOpacity>
       )}
 
@@ -282,6 +312,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.gray,
     marginTop: 2,
+  },
+  // Coordinator Button
+  coordButton: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: colors.coord,
+  },
+  coordIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.coord,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  coordTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.coord,
   },
   // Section
   sectionHeader: {
