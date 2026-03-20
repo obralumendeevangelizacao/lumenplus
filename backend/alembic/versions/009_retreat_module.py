@@ -1,7 +1,7 @@
 """Módulo de retiros: tabelas retreats, retreat_eligibility_rules, retreat_registrations
 
-Revision ID: 009_retreat_module
-Revises: 008_profile_extra_fields
+Revision ID: 014_retreat_module
+Revises: 013_privacy_v1_3_dpo
 Create Date: 2026-03-20
 """
 
@@ -10,8 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "009_retreat_module"
-down_revision: Union[str, None] = "008_profile_extra_fields"
+revision: str = "014_retreat_module"
+down_revision: Union[str, None] = "013_privacy_v1_3_dpo"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

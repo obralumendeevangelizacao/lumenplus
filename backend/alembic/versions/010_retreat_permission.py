@@ -1,7 +1,7 @@
 """Adiciona permissão PERMISSION_MANAGE_RETREATS
 
-Revision ID: 010_retreat_permission
-Revises: 009_retreat_module
+Revision ID: 015_retreat_permission
+Revises: 014_retreat_module
 Create Date: 2026-03-20
 """
 
@@ -9,8 +9,8 @@ from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "010_retreat_permission"
-down_revision: Union[str, None] = "009_retreat_module"
+revision: str = "015_retreat_permission"
+down_revision: Union[str, None] = "014_retreat_module"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
