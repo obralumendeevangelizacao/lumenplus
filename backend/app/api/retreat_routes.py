@@ -172,6 +172,38 @@ def _get_user_fee_info(db, user_id: UUID, retreat: Retreat, modality: str | None
     }
 
 
+def _user_eligible_as_service(db, user_id: UUID, retreat: Retreat) -> bool:
+    """Verifica se o usuário é elegível para a equipe de serviço."""
+    service_rules = [r for r in (retreat.eligibility_rules or []) if r.rule_group == "SERVICE"]
+    if not service_rules:
+        return False  # sem regras de serviço = equipe fechada (convite do admin)
+
+    for rule in service_rules:
+        if rule.rule_type == RetreatEligibilityRuleType.ORG_UNIT:
+            membership = db.execute(
+                select(OrgMembership).where(
+                    OrgMembership.user_id == user_id,
+                    OrgMembership.org_unit_id == rule.org_unit_id,
+                    OrgMembership.status == MembershipStatus.ACTIVE,
+                )
+            ).scalar_one_or_none()
+            if membership:
+                return True
+        elif rule.rule_type == RetreatEligibilityRuleType.VOCATIONAL_REALITY:
+            profile = db.execute(
+                select(UserProfile).where(UserProfile.user_id == user_id)
+            ).scalar_one_or_none()
+            if profile and profile.vocational_reality_item_id:
+                item = db.execute(
+                    select(ProfileCatalogItem).where(
+                        ProfileCatalogItem.id == profile.vocational_reality_item_id
+                    )
+                ).scalar_one_or_none()
+                if item and item.code == rule.vocational_reality_code:
+                    return True
+    return False
+
+
 def _available_modalities(retreat: Retreat) -> list[str]:
     """Retorna as modalidades disponíveis com base nas casas do retiro."""
     if not retreat.houses:
@@ -189,15 +221,9 @@ def _retreat_to_dict(
     retreat: Retreat,
     registration: RetreatRegistration | None = None,
     user_fee_info: dict | None = None,
+    eligible_as_participant: bool = True,
+    eligible_as_service: bool = False,
 ) -> dict:
-    rules = [
-        {
-            "rule_type": r.rule_type.value,
-            "org_unit_id": str(r.org_unit_id) if r.org_unit_id else None,
-            "vocational_reality_code": r.vocational_reality_code,
-        }
-        for r in (retreat.eligibility_rules or [])
-    ]
     result = {
         "id": str(retreat.id),
         "title": retreat.title,
@@ -225,6 +251,8 @@ def _retreat_to_dict(
             for ft in (retreat.fee_types or [])
         ],
         "my_fee": user_fee_info,
+        "eligible_as_participant": eligible_as_participant,
+        "eligible_as_service": eligible_as_service,
         "created_at": retreat.created_at.isoformat(),
     }
     if registration:
@@ -281,7 +309,9 @@ async def list_retreats(current_user: CurrentUser, db: DBSession):
 
     result = []
     for retreat in retreats:
-        if not _user_eligible_for_retreat(db, current_user.id, retreat):
+        as_participant = _user_eligible_for_retreat(db, current_user.id, retreat)
+        as_service = _user_eligible_as_service(db, current_user.id, retreat)
+        if not as_participant and not as_service:
             continue
         reg = db.execute(
             select(RetreatRegistration).where(
@@ -290,7 +320,7 @@ async def list_retreats(current_user: CurrentUser, db: DBSession):
             )
         ).scalar_one_or_none()
         user_fee = _get_user_fee_info(db, current_user.id, retreat)
-        result.append(_retreat_to_dict(retreat, reg, user_fee))
+        result.append(_retreat_to_dict(retreat, reg, user_fee, as_participant, as_service))
 
     return {"retreats": result}
 
@@ -302,7 +332,9 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
     if not retreat or retreat.status not in (RetreatStatus.PUBLISHED, RetreatStatus.CLOSED):
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
 
-    if not _user_eligible_for_retreat(db, current_user.id, retreat):
+    as_participant = _user_eligible_for_retreat(db, current_user.id, retreat)
+    as_service = _user_eligible_as_service(db, current_user.id, retreat)
+    if not as_participant and not as_service:
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Você não é elegível para este retiro"})
 
     reg = db.execute(
@@ -313,23 +345,29 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
     ).scalar_one_or_none()
 
     user_fee = _get_user_fee_info(db, current_user.id, retreat)
-    return _retreat_to_dict(retreat, reg, user_fee)
+    return _retreat_to_dict(retreat, reg, user_fee, as_participant, as_service)
 
 
 class RegisterBody(BaseModel):
     notes: str | None = None
-    modality_preference: str | None = None  # PRESENCIAL | HIBRIDO
+    modality_preference: str | None = None   # PRESENCIAL | HIBRIDO
+    registration_type: str = "PARTICIPANT"    # PARTICIPANT | SERVICE
 
 
 @router.post("/{retreat_id}/register", status_code=201)
 async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_user: CurrentUser, db: DBSession):
-    """Inscreve o usuário no retiro."""
+    """Inscreve o usuário no retiro como PARTICIPANTE ou EQUIPE_SERVICO."""
     retreat = db.get(Retreat, retreat_id)
     if not retreat or retreat.status != RetreatStatus.PUBLISHED:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado ou não está aberto"})
 
-    if not _user_eligible_for_retreat(db, current_user.id, retreat):
-        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Você não é elegível para este retiro"})
+    # Verifica elegibilidade conforme tipo de inscrição
+    if body.registration_type == "SERVICE":
+        if not _user_eligible_as_service(db, current_user.id, retreat):
+            raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Você não é elegível para a equipe de serviço deste retiro"})
+    else:
+        if not _user_eligible_for_retreat(db, current_user.id, retreat):
+            raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Você não é elegível para este retiro"})
 
     # Valida modalidade
     available_modalities = _available_modalities(retreat)
@@ -357,9 +395,12 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
     if existing and existing.status != RegistrationStatus.CANCELLED:
         raise HTTPException(status_code=409, detail={"error": "already_registered", "message": "Você já está inscrito neste retiro"})
 
+    # Define retreat_role conforme tipo de inscrição
+    retreat_role = "EQUIPE_SERVICO" if body.registration_type == "SERVICE" else "PARTICIPANTE"
+
     # Calcula fee_category (HIBRIDO tem taxa própria; demais usam papel + vocacional)
     voc_code = _get_user_voc_code(db, current_user.id)
-    fee_category = _compute_fee_category("PARTICIPANTE", voc_code, modality)
+    fee_category = _compute_fee_category(retreat_role, voc_code, modality)
 
     # Verifica vagas
     if not _spots_available(db, retreat, modality):
@@ -372,7 +413,7 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
         existing.notes = body.notes
         existing.modality_preference = modality
         existing.fee_category = fee_category
-        existing.retreat_role = "PARTICIPANTE"
+        existing.retreat_role = retreat_role
         existing.cancelled_at = None
         existing.cancelled_by_user_id = None
         existing.payment_proof_url = None
@@ -385,7 +426,7 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
             status=status,
             notes=body.notes,
             modality_preference=modality,
-            retreat_role="PARTICIPANTE",
+            retreat_role=retreat_role,
             fee_category=fee_category,
         )
         db.add(reg)

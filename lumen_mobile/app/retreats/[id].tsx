@@ -99,6 +99,8 @@ interface RetreatDetail {
   available_modalities: string[];
   my_fee: FeeInfo | null;
   fee_types: FeeTypeEntry[];
+  eligible_as_participant: boolean;
+  eligible_as_service: boolean;
   my_registration: MyRegistration | null;
 }
 
@@ -109,11 +111,12 @@ export default function RetreatDetailScreen() {
   const [error, setError]           = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [showRegModal, setShowRegModal]         = useState(false);
-  const [notes, setNotes]                       = useState('');
-  const [selectedModality, setSelectedModality] = useState<string | null>(null);
-  const [submitting, setSubmitting]             = useState(false);
-  const [actionMsg, setActionMsg]               = useState<string | null>(null);
+  const [showRegModal, setShowRegModal]           = useState(false);
+  const [notes, setNotes]                         = useState('');
+  const [selectedModality, setSelectedModality]   = useState<string | null>(null);
+  const [registrationType, setRegistrationType]   = useState<'PARTICIPANT' | 'SERVICE'>('PARTICIPANT');
+  const [submitting, setSubmitting]               = useState(false);
+  const [actionMsg, setActionMsg]                 = useState<string | null>(null);
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
@@ -140,9 +143,10 @@ export default function RetreatDetailScreen() {
     setRefreshing(false);
   };
 
-  const openRegModal = () => {
+  const openRegModal = (type: 'PARTICIPANT' | 'SERVICE') => {
     const modalities = retreat?.available_modalities ?? [];
     setSelectedModality(modalities.length === 1 ? modalities[0] : null);
+    setRegistrationType(type);
     setNotes('');
     setShowRegModal(true);
   };
@@ -161,6 +165,7 @@ export default function RetreatDetailScreen() {
         {
           notes: notes || null,
           modality_preference: selectedModality ?? (modalities[0] || null),
+          registration_type: registrationType,
         }
       );
       setActionMsg(res.message);
@@ -214,6 +219,7 @@ export default function RetreatDetailScreen() {
   const canCancel = reg && !['CONFIRMED', 'CANCELLED'].includes(reg.status);
   const isClosed = retreat.status === 'CLOSED';
   const hasMultipleModalities = retreat.available_modalities.length > 1;
+  const isServiceReg = reg?.retreat_role === 'EQUIPE_SERVICO';
 
   return (
     <ScrollView
@@ -320,10 +326,16 @@ export default function RetreatDetailScreen() {
       )}
 
       {/* CTA Buttons */}
-      {!isClosed && canRegister && (
-        <TouchableOpacity style={styles.primaryBtn} onPress={openRegModal} disabled={submitting}>
+      {!isClosed && canRegister && retreat.eligible_as_participant && (
+        <TouchableOpacity style={styles.primaryBtn} onPress={() => openRegModal('PARTICIPANT')} disabled={submitting}>
           <Ionicons name="person-add-outline" size={20} color={colors.white} />
-          <Text style={styles.primaryBtnText}>Inscrever-se</Text>
+          <Text style={styles.primaryBtnText}>Inscrever-se como Participante</Text>
+        </TouchableOpacity>
+      )}
+      {!isClosed && canRegister && retreat.eligible_as_service && (
+        <TouchableOpacity style={[styles.primaryBtn, styles.serviceBtnColor]} onPress={() => openRegModal('SERVICE')} disabled={submitting}>
+          <Ionicons name="hammer-outline" size={20} color={colors.white} />
+          <Text style={styles.primaryBtnText}>Inscrever-se na Equipe de Serviço</Text>
         </TouchableOpacity>
       )}
 
@@ -347,7 +359,9 @@ export default function RetreatDetailScreen() {
       <Modal visible={showRegModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Inscrição — {retreat.title}</Text>
+            <Text style={styles.modalTitle}>
+              {registrationType === 'SERVICE' ? '⚙️ Equipe de Serviço' : '✋ Participante'} — {retreat.title}
+            </Text>
 
             {/* Taxa dinâmica: híbrido tem taxa própria */}
             {(() => {
@@ -510,6 +524,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   primaryBtnText: { color: colors.white, fontSize: 16, fontWeight: '700' },
+  serviceBtnColor: { backgroundColor: '#7c3aed' },
   cancelBtn: {
     borderWidth: 1.5, borderColor: colors.red, borderRadius: 14, padding: 14,
     alignItems: 'center',
