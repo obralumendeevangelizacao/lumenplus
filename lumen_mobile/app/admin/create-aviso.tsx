@@ -16,7 +16,6 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Modal,
 } from 'react-native';
@@ -88,6 +87,7 @@ export default function CreateAvisoScreen() {
   const [sentCount, setSentCount] = useState(0);
   const [sendError, setSendError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [scopeLoadError, setScopeLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadScopes();
@@ -108,9 +108,12 @@ export default function CreateAvisoScreen() {
         setDestMode('scope');
         if (data.scopes.length === 1) setSelectedScope(data.scopes[0]);
       }
-    } catch {
-      Alert.alert('Erro', 'Nao foi possivel carregar as permissoes de envio.');
-      router.back();
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.detail?.message ||
+        err?.message ||
+        'Sem permissão para enviar avisos.';
+      setScopeLoadError(msg);
     } finally {
       setLoadingScopes(false);
     }
@@ -233,6 +236,26 @@ export default function CreateAvisoScreen() {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.admin} />
       </View>
+    );
+  }
+
+  if (scopeLoadError) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Criar Aviso' }} />
+        <View style={styles.loadingContainer}>
+          <Ionicons name="lock-closed-outline" size={48} color={colors.error} />
+          <Text style={[styles.label, { textAlign: 'center', marginTop: 16, color: colors.error }]}>
+            {scopeLoadError}
+          </Text>
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: colors.gray, marginTop: 24 }]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.sendButtonText}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      </>
     );
   }
 

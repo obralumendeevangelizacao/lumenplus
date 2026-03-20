@@ -17,7 +17,6 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -427,6 +426,7 @@ function CreateUnitModal({
   const [groupType, setGroupType] = useState('');
   const [isGrupo, setIsGrupo] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Determina o tipo do filho baseado no parent
   const childType = state.isRoot ? 'CONSELHO_GERAL' : (
@@ -445,12 +445,13 @@ function CreateUnitModal({
   }, [state.visible]);
 
   const handleSubmit = async () => {
+    setFormError(null);
     if (!name.trim()) {
-      Alert.alert('Campo obrigatório', 'Informe o nome da entidade.');
+      setFormError('Informe o nome da entidade.');
       return;
     }
     if ((childType === 'GRUPO') && !groupType) {
-      Alert.alert('Campo obrigatório', 'Selecione o tipo de grupo.');
+      setFormError('Selecione o tipo de grupo.');
       return;
     }
 
@@ -466,7 +467,7 @@ function CreateUnitModal({
       onSuccess();
     } catch (e: any) {
       const msg = e?.response?.data?.detail?.message ?? 'Erro ao criar entidade';
-      Alert.alert('Erro', msg);
+      setFormError(msg);
     } finally {
       setLoading(false);
     }
@@ -554,6 +555,12 @@ function CreateUnitModal({
           )}
         </ScrollView>
 
+        {formError && (
+          <Text style={[styles.errorText, { paddingHorizontal: 16, paddingBottom: 4 }]}>
+            {formError}
+          </Text>
+        )}
+
         <View style={styles.modalFooter}>
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={loading}>
             <Text style={styles.cancelBtnText}>Cancelar</Text>
@@ -588,6 +595,8 @@ function InviteModal({
   const [role, setRole] = useState<'MEMBER' | 'COORDINATOR'>('MEMBER');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.visible) {
@@ -615,6 +624,7 @@ function InviteModal({
 
   const handleSendInvite = async () => {
     if (!selectedUser) return;
+    setInviteError(null);
     setSending(true);
     try {
       await orgAdminService.sendInvite(state.orgUnitId, {
@@ -622,11 +632,11 @@ function InviteModal({
         role,
         message: message.trim() || undefined,
       });
-      Alert.alert('Sucesso', `Convite enviado para ${selectedUser.name}!`);
-      onClose();
+      setInviteSuccess(`Convite enviado para ${selectedUser.name}!`);
+      setTimeout(() => { setInviteSuccess(null); onClose(); }, 1500);
     } catch (e: any) {
       const msg = e?.response?.data?.detail?.message ?? 'Erro ao enviar convite';
-      Alert.alert('Erro', msg);
+      setInviteError(msg);
     } finally {
       setSending(false);
     }
@@ -730,6 +740,16 @@ function InviteModal({
             </>
           )}
         </ScrollView>
+
+        {inviteSuccess && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#dcfce7', margin: 12, borderRadius: 10 }}>
+            <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
+            <Text style={{ color: '#16a34a', fontWeight: '600', flex: 1 }}>{inviteSuccess}</Text>
+          </View>
+        )}
+        {inviteError && (
+          <Text style={[styles.errorText, { paddingHorizontal: 16, paddingBottom: 4 }]}>{inviteError}</Text>
+        )}
 
         {selectedUser && (
           <View style={styles.modalFooter}>
@@ -873,6 +893,8 @@ function EntityProfileModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<MemberItem | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (state.visible && state.unit) {
@@ -906,7 +928,7 @@ function EntityProfileModal({
       onMembersChanged();
     } catch (e: any) {
       const msg = e?.response?.data?.detail?.message ?? 'Erro ao alterar cargo';
-      Alert.alert('Erro', msg);
+      setError(msg);
     } finally {
       setActionLoading(null);
     }
@@ -914,30 +936,24 @@ function EntityProfileModal({
 
   const handleRemove = (member: MemberItem) => {
     if (!state.unit) return;
-    Alert.alert(
-      'Remover membro',
-      `Remover ${member.user_name} de "${state.unit.name}"?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            setActionLoading(member.user_id);
-            try {
-              await orgAdminService.removeMember(state.unit!.id, member.user_id);
-              setMembers((prev) => prev.filter((m) => m.user_id !== member.user_id));
-              onMembersChanged();
-            } catch (e: any) {
-              const msg = e?.response?.data?.detail?.message ?? 'Erro ao remover membro';
-              Alert.alert('Erro', msg);
-            } finally {
-              setActionLoading(null);
-            }
-          },
-        },
-      ]
-    );
+    setRemoveError(null);
+    setMemberToRemove(member);
+  };
+
+  const handleConfirmRemove = async () => {
+    if (!memberToRemove || !state.unit) return;
+    setActionLoading(memberToRemove.user_id);
+    try {
+      await orgAdminService.removeMember(state.unit.id, memberToRemove.user_id);
+      setMembers((prev) => prev.filter((m) => m.user_id !== memberToRemove.user_id));
+      setMemberToRemove(null);
+      onMembersChanged();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail?.message ?? 'Erro ao remover membro';
+      setRemoveError(msg);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const coordinators = members.filter((m) => m.role === 'COORDINATOR');
@@ -1031,6 +1047,50 @@ function EntityProfileModal({
             )}
           </ScrollView>
         )}
+
+        {/* Modal de confirmação de remoção */}
+        <Modal
+          visible={!!memberToRemove}
+          transparent
+          animationType="fade"
+          onRequestClose={() => { setMemberToRemove(null); setRemoveError(null); }}
+        >
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmBox}>
+              <View style={[styles.confirmIcon, { backgroundColor: '#fee2e2' }]}>
+                <Ionicons name="person-remove-outline" size={28} color={colors.danger} />
+              </View>
+              <Text style={styles.confirmTitle}>Remover membro</Text>
+              <Text style={styles.confirmMsg}>
+                Remover <Text style={{ fontWeight: '700' }}>{memberToRemove?.user_name}</Text> de "{state.unit?.name}"?
+              </Text>
+              {removeError && (
+                <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 8 }]}>
+                  {removeError}
+                </Text>
+              )}
+              <View style={styles.confirmActions}>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, styles.confirmBtnCancel]}
+                  onPress={() => { setMemberToRemove(null); setRemoveError(null); }}
+                >
+                  <Text style={styles.confirmBtnCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmBtn, { backgroundColor: colors.danger }]}
+                  onPress={handleConfirmRemove}
+                  disabled={!!actionLoading}
+                >
+                  {actionLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.confirmBtnText}>Remover</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -1322,4 +1382,27 @@ const styles = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '600', color: colors.text },
   userEmail: { fontSize: 12, color: colors.gray },
   noResults: { textAlign: 'center', color: colors.gray, marginTop: 16, fontSize: 14 },
+
+  // Confirmação de remoção
+  confirmOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  confirmBox: {
+    backgroundColor: colors.white, borderRadius: 16,
+    padding: 24, width: '100%', maxWidth: 340, alignItems: 'center',
+  },
+  confirmIcon: {
+    width: 56, height: 56, borderRadius: 28,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  confirmTitle: { fontSize: 17, fontWeight: '700', color: colors.text, marginBottom: 8 },
+  confirmMsg: { fontSize: 14, color: colors.gray, textAlign: 'center', marginBottom: 20, lineHeight: 20 },
+  confirmActions: { flexDirection: 'row', gap: 12, width: '100%' },
+  confirmBtn: {
+    flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center',
+  },
+  confirmBtnCancel: { borderWidth: 1.5, borderColor: colors.lightGray },
+  confirmBtnCancelText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  confirmBtnText: { color: colors.white, fontWeight: '700', fontSize: 14 },
 });

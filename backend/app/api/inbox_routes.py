@@ -35,10 +35,10 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 def _has_full_send_access(db, user_id) -> bool:
     """
     Retorna True se o usuário tem acesso nativo completo de envio:
-    role global AVISOS, DEV ou ADMIN, ou coordenador do Conselho Geral.
+    role global AVISOS, DEV, ADMIN ou SECRETARY, ou coordenador do Conselho Geral.
     """
     global_roles = get_user_global_roles(db, user_id)
-    if any(r in global_roles for r in ["DEV", "ADMIN", "AVISOS"]):
+    if any(r in global_roles for r in ["DEV", "ADMIN", "AVISOS", "SECRETARY"]):
         return True
     return is_conselho_geral_coordinator(db, user_id)
 

@@ -221,3 +221,26 @@ PRIVACY_V1_1 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.1")
 # (v1.0 e v1.1 tinham placeholders "[INSERIR ...]")
 TERMS_V1_2 = TERMS_V1.replace("Versão 1.0", "Versão 1.2")
 PRIVACY_V1_2 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.2")
+
+# v1.3 — DPO formalmente designado: Elias Sales de Freitas, oeliasandraade@gmail.com
+PRIVACY_V1_3 = (
+    PRIVACY_V1_2
+    .replace("Versão 1.2", "Versão 1.3")
+    .replace(
+        "E-mail do Encarregado (DPO): privacidade@obralumen.org.br",
+        "Encarregado (DPO): Elias Sales de Freitas\nE-mail: oeliasandraade@gmail.com",
+    )
+    .replace(
+        "Conforme o Art. 41 da LGPD, a Obra Lumen de Evangelização está em processo de "
+        "designação formal do Encarregado pelo Tratamento de Dados. Enquanto isso, o canal "
+        "de contato para exercício de direitos dos titulares é:\n"
+        "E-mail: privacidade@obralumen.org.br\n"
+        "Prazo de resposta: até 15 dias úteis.",
+        "Conforme o Art. 41 da LGPD, a Obra Lumen de Evangelização designou formalmente o "
+        "Encarregado pelo Tratamento de Dados (DPO):\n"
+        "Nome: Elias Sales de Freitas\n"
+        "E-mail: oeliasandraade@gmail.com\n"
+        "Prazo de resposta: até 15 dias úteis.",
+    )
+    .replace("privacidade@obralumen.org.br", "oeliasandraade@gmail.com")
+)

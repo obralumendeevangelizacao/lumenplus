@@ -24,6 +24,7 @@ export default function AdminLayout() {
       }}
     >
       <Stack.Screen name="index"        options={{ title: 'Administração' }} />
+      <Stack.Screen name="dashboard"    options={{ title: 'Dashboard' }} />
       <Stack.Screen name="entities"     options={{ title: 'Entidades' }} />
       <Stack.Screen name="users"        options={{ title: 'Gestão de Usuários' }} />
       <Stack.Screen name="create-aviso" options={{ title: 'Criar Aviso' }} />
