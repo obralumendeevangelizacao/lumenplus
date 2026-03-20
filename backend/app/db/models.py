@@ -750,6 +750,7 @@ class FeeCategory(enum.Enum):
     EQUIPE_SERVICO_MISSAO = "EQUIPE_SERVICO_MISSAO"
     EQUIPE_SERVICO_CASAS = "EQUIPE_SERVICO_CASAS"
     EQUIPE_SERVICO_CV = "EQUIPE_SERVICO_CV"
+    HIBRIDO = "HIBRIDO"  # Taxa única para quem escolhe modalidade híbrida
 
 
 class RetreatStatus(enum.Enum):
@@ -846,6 +847,8 @@ class RetreatEligibilityRule(Base):
         PGUUID(as_uuid=True), ForeignKey("org_units.id", ondelete="CASCADE"), nullable=True
     )
     vocational_reality_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # rule_group: "PARTICIPANT" (quem pode participar) | "SERVICE" (quem pode servir)
+    rule_group: Mapped[str] = mapped_column(Text, nullable=False, server_default="PARTICIPANT")
 
     retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="eligibility_rules")
     org_unit: Mapped["OrgUnit | None"] = relationship("OrgUnit")

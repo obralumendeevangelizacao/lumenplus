@@ -67,6 +67,7 @@ FEE_CATEGORY_LABELS = {
     "EQUIPE_SERVICO_MISSAO": "Equipe de Serviço de Missão",
     "EQUIPE_SERVICO_CASAS": "Equipe de Serviço de Casas",
     "EQUIPE_SERVICO_CV": "Equipe de Serviço da Comunidade de Vida",
+    "HIBRIDO": "Híbrido",
 }
 
 ALL_FEE_CATEGORIES = list(FEE_CATEGORY_LABELS.keys())
@@ -121,16 +122,21 @@ def _fee_types_to_list(fee_types) -> list[dict]:
     ]
 
 
+def _rule_to_dict(r) -> dict:
+    return {
+        "id": str(r.id),
+        "rule_type": r.rule_type.value,
+        "org_unit_id": str(r.org_unit_id) if r.org_unit_id else None,
+        "org_unit_name": r.org_unit.name if r.org_unit else None,
+        "vocational_reality_code": r.vocational_reality_code,
+        "rule_group": r.rule_group,
+    }
+
+
 def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> dict:
-    rules = [
-        {
-            "id": str(r.id),
-            "rule_type": r.rule_type.value,
-            "org_unit_id": str(r.org_unit_id) if r.org_unit_id else None,
-            "vocational_reality_code": r.vocational_reality_code,
-        }
-        for r in (retreat.eligibility_rules or [])
-    ]
+    all_rules = retreat.eligibility_rules or []
+    participant_rules = [_rule_to_dict(r) for r in all_rules if r.rule_group == "PARTICIPANT"]
+    service_rules     = [_rule_to_dict(r) for r in all_rules if r.rule_group == "SERVICE"]
     result = {
         "id": str(retreat.id),
         "title": retreat.title,
@@ -144,7 +150,8 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
         "max_participants": retreat.max_participants,
         "price_brl": retreat.price_brl,
         "visibility_type": retreat.visibility_type.value,
-        "eligibility_rules": rules,
+        "participant_eligibility_rules": participant_rules,
+        "service_eligibility_rules": service_rules,
         "houses": _houses_to_list(retreat.houses),
         "fee_types": _fee_types_to_list(retreat.fee_types),
         "created_by_user_id": str(retreat.created_by_user_id) if retreat.created_by_user_id else None,
@@ -227,6 +234,7 @@ class EligibilityRuleInput(BaseModel):
     rule_type: str  # ORG_UNIT | VOCATIONAL_REALITY
     org_unit_id: UUID | None = None
     vocational_reality_code: str | None = None
+    rule_group: str = "PARTICIPANT"  # PARTICIPANT | SERVICE
 
 
 class CreateRetreatBody(BaseModel):
@@ -241,6 +249,7 @@ class CreateRetreatBody(BaseModel):
     price_brl: str | None = None
     visibility_type: str = "ALL"
     eligibility_rules: list[EligibilityRuleInput] = []
+    service_eligibility_rules: list[EligibilityRuleInput] = []
 
 
 class PatchRetreatBody(BaseModel):
@@ -255,6 +264,14 @@ class PatchRetreatBody(BaseModel):
     price_brl: str | None = None
     visibility_type: str | None = None
     eligibility_rules: list[EligibilityRuleInput] | None = None
+    service_eligibility_rules: list[EligibilityRuleInput] | None = None
+
+
+class AddEligibilityRuleBody(BaseModel):
+    rule_type: str  # ORG_UNIT | VOCATIONAL_REALITY
+    org_unit_id: UUID | None = None
+    vocational_reality_code: str | None = None
+    rule_group: str  # PARTICIPANT | SERVICE
 
 
 class RejectBody(BaseModel):
@@ -315,12 +332,17 @@ async def create_retreat(body: CreateRetreatBody, current_user: CurrentUser, db:
     db.add(retreat)
     db.flush()
 
-    for rule_input in body.eligibility_rules:
+    all_rule_inputs = [
+        *[(r, "PARTICIPANT") for r in body.eligibility_rules],
+        *[(r, "SERVICE") for r in body.service_eligibility_rules],
+    ]
+    for rule_input, group in all_rule_inputs:
         db.add(RetreatEligibilityRule(
             retreat_id=retreat.id,
             rule_type=RetreatEligibilityRuleType(rule_input.rule_type),
             org_unit_id=rule_input.org_unit_id,
             vocational_reality_code=rule_input.vocational_reality_code,
+            rule_group=group,
         ))
 
     db.commit()
@@ -373,20 +395,44 @@ async def update_retreat(retreat_id: UUID, body: PatchRetreatBody, current_user:
         retreat.price_brl = body.price_brl
     if body.visibility_type is not None:
         retreat.visibility_type = RetreatVisibilityType(body.visibility_type)
-    if body.eligibility_rules is not None:
-        existing_rules = db.execute(
-            select(RetreatEligibilityRule).where(RetreatEligibilityRule.retreat_id == retreat_id)
-        ).scalars().all()
-        for rule in existing_rules:
-            db.delete(rule)
-        db.flush()
-        for rule_input in body.eligibility_rules:
-            db.add(RetreatEligibilityRule(
-                retreat_id=retreat.id,
-                rule_type=RetreatEligibilityRuleType(rule_input.rule_type),
-                org_unit_id=rule_input.org_unit_id,
-                vocational_reality_code=rule_input.vocational_reality_code,
-            ))
+    if body.eligibility_rules is not None or body.service_eligibility_rules is not None:
+        # Substitui apenas os grupos que foram enviados
+        if body.eligibility_rules is not None:
+            existing_part = db.execute(
+                select(RetreatEligibilityRule).where(
+                    RetreatEligibilityRule.retreat_id == retreat_id,
+                    RetreatEligibilityRule.rule_group == "PARTICIPANT",
+                )
+            ).scalars().all()
+            for rule in existing_part:
+                db.delete(rule)
+            db.flush()
+            for rule_input in body.eligibility_rules:
+                db.add(RetreatEligibilityRule(
+                    retreat_id=retreat.id,
+                    rule_type=RetreatEligibilityRuleType(rule_input.rule_type),
+                    org_unit_id=rule_input.org_unit_id,
+                    vocational_reality_code=rule_input.vocational_reality_code,
+                    rule_group="PARTICIPANT",
+                ))
+        if body.service_eligibility_rules is not None:
+            existing_svc = db.execute(
+                select(RetreatEligibilityRule).where(
+                    RetreatEligibilityRule.retreat_id == retreat_id,
+                    RetreatEligibilityRule.rule_group == "SERVICE",
+                )
+            ).scalars().all()
+            for rule in existing_svc:
+                db.delete(rule)
+            db.flush()
+            for rule_input in body.service_eligibility_rules:
+                db.add(RetreatEligibilityRule(
+                    retreat_id=retreat.id,
+                    rule_type=RetreatEligibilityRuleType(rule_input.rule_type),
+                    org_unit_id=rule_input.org_unit_id,
+                    vocational_reality_code=rule_input.vocational_reality_code,
+                    rule_group="SERVICE",
+                ))
 
     db.commit()
     db.refresh(retreat)
@@ -485,6 +531,49 @@ async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUs
     db.delete(house)
     db.commit()
     return {"message": "Casa removida"}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints — Regras de elegibilidade (add/remove individual)
+# ---------------------------------------------------------------------------
+
+@router.post("/{retreat_id}/eligibility-rules", status_code=201)
+async def add_eligibility_rule(retreat_id: UUID, body: AddEligibilityRuleBody, current_user: CurrentUser, db: DBSession):
+    """Adiciona uma regra de elegibilidade ao retiro (PARTICIPANT ou SERVICE)."""
+    _require_retreat_manager(db, current_user.id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    if body.rule_group not in ("PARTICIPANT", "SERVICE"):
+        raise HTTPException(status_code=400, detail={"error": "invalid_group", "message": "rule_group deve ser PARTICIPANT ou SERVICE"})
+    try:
+        rtype = RetreatEligibilityRuleType(body.rule_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"error": "invalid_type", "message": "rule_type deve ser ORG_UNIT ou VOCATIONAL_REALITY"})
+
+    rule = RetreatEligibilityRule(
+        retreat_id=retreat_id,
+        rule_type=rtype,
+        org_unit_id=body.org_unit_id,
+        vocational_reality_code=body.vocational_reality_code,
+        rule_group=body.rule_group,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return _rule_to_dict(rule)
+
+
+@router.delete("/{retreat_id}/eligibility-rules/{rule_id}", status_code=200)
+async def delete_eligibility_rule(retreat_id: UUID, rule_id: UUID, current_user: CurrentUser, db: DBSession):
+    """Remove uma regra de elegibilidade do retiro."""
+    _require_retreat_manager(db, current_user.id)
+    rule = db.get(RetreatEligibilityRule, rule_id)
+    if not rule or rule.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Regra não encontrada"})
+    db.delete(rule)
+    db.commit()
+    return {"message": "Regra removida"}
 
 
 # ---------------------------------------------------------------------------
@@ -647,20 +736,23 @@ async def set_registration_role(retreat_id: UUID, registration_id: UUID, body: S
 
     reg.retreat_role = body.retreat_role
 
-    # Recalcula fee_category com base no novo papel + realidade vocacional do perfil
-    profile = db.execute(
-        select(UserProfile).where(UserProfile.user_id == reg.user_id)
-    ).scalar_one_or_none()
-    voc_code = None
-    if profile and profile.vocational_reality_item_id:
-        from app.db.models import ProfileCatalogItem
-        item = db.execute(
-            select(ProfileCatalogItem).where(ProfileCatalogItem.id == profile.vocational_reality_item_id)
+    # Participante híbrido mantém taxa HIBRIDO independente do papel
+    if reg.modality_preference == "HIBRIDO":
+        reg.fee_category = "HIBRIDO"
+    else:
+        # Recalcula fee_category com base no novo papel + realidade vocacional do perfil
+        profile = db.execute(
+            select(UserProfile).where(UserProfile.user_id == reg.user_id)
         ).scalar_one_or_none()
-        if item:
-            voc_code = item.code
-
-    reg.fee_category = _compute_fee_category(body.retreat_role, voc_code)
+        voc_code = None
+        if profile and profile.vocational_reality_item_id:
+            from app.db.models import ProfileCatalogItem
+            item = db.execute(
+                select(ProfileCatalogItem).where(ProfileCatalogItem.id == profile.vocational_reality_item_id)
+            ).scalar_one_or_none()
+            if item:
+                voc_code = item.code
+        reg.fee_category = _compute_fee_category(body.retreat_role, voc_code)
     db.commit()
     return {
         "retreat_role": reg.retreat_role,
@@ -669,8 +761,15 @@ async def set_registration_role(retreat_id: UUID, registration_id: UUID, body: S
     }
 
 
-def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None) -> str:
-    """Computa a categoria de taxa a partir do papel e da realidade vocacional."""
+def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None, modality: str | None = None) -> str:
+    """
+    Computa a categoria de taxa.
+    Modalidade HIBRIDO tem taxa própria — ignora papel e vocacional.
+    Quando o admin muda o papel de um inscrito híbrido, preserva HIBRIDO.
+    """
+    if modality == "HIBRIDO":
+        return "HIBRIDO"
+
     voc = (vocational_reality_code or "").upper()
     is_equipe = retreat_role == "EQUIPE_SERVICO"
     prefix = "EQUIPE_SERVICO" if is_equipe else "PARTICIPANTE"

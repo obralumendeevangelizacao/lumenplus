@@ -50,6 +50,7 @@ FEE_CATEGORY_LABELS = {
     "EQUIPE_SERVICO_MISSAO": "Equipe de Serviço de Missão",
     "EQUIPE_SERVICO_CASAS": "Equipe de Serviço de Casas",
     "EQUIPE_SERVICO_CV": "Equipe de Serviço da Comunidade de Vida",
+    "HIBRIDO": "Híbrido",
 }
 
 
@@ -112,7 +113,18 @@ def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
     return False
 
 
-def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None) -> str:
+def _compute_fee_category(
+    retreat_role: str,
+    vocational_reality_code: str | None,
+    modality: str | None = None,
+) -> str:
+    """
+    Calcula a categoria de taxa.
+    Modalidade HIBRIDO tem taxa própria (ignora papel/vocacional).
+    """
+    if modality == "HIBRIDO":
+        return "HIBRIDO"
+
     voc = (vocational_reality_code or "").upper()
     is_equipe = retreat_role == "EQUIPE_SERVICO"
     prefix = "EQUIPE_SERVICO" if is_equipe else "PARTICIPANTE"
@@ -139,10 +151,14 @@ def _get_user_voc_code(db, user_id: UUID) -> str | None:
     return None
 
 
-def _get_user_fee_info(db, user_id: UUID, retreat: Retreat) -> dict | None:
-    """Retorna a taxa esperada do usuário (categoria + valor) para o retiro."""
+def _get_user_fee_info(db, user_id: UUID, retreat: Retreat, modality: str | None = None) -> dict | None:
+    """
+    Retorna a taxa esperada do usuário para o retiro.
+    Se modalidade = HÍBRIDO, retorna a taxa HIBRIDO independente de perfil.
+    Caso contrário, calcula a partir da realidade vocacional (papel = PARTICIPANTE por padrão).
+    """
     voc_code = _get_user_voc_code(db, user_id)
-    fee_cat = _compute_fee_category("PARTICIPANTE", voc_code)  # default role PARTICIPANTE
+    fee_cat = _compute_fee_category("PARTICIPANTE", voc_code, modality)
     fee_type = db.execute(
         select(RetreatFeeType).where(
             RetreatFeeType.retreat_id == retreat.id,
@@ -341,9 +357,9 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
     if existing and existing.status != RegistrationStatus.CANCELLED:
         raise HTTPException(status_code=409, detail={"error": "already_registered", "message": "Você já está inscrito neste retiro"})
 
-    # Calcula fee_category
+    # Calcula fee_category (HIBRIDO tem taxa própria; demais usam papel + vocacional)
     voc_code = _get_user_voc_code(db, current_user.id)
-    fee_category = _compute_fee_category("PARTICIPANTE", voc_code)
+    fee_category = _compute_fee_category("PARTICIPANTE", voc_code, modality)
 
     # Verifica vagas
     if not _spots_available(db, retreat, modality):

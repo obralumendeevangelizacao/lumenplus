@@ -58,6 +58,7 @@ const FEE_ALL_CATEGORIES = [
   { key: 'EQUIPE_SERVICO_MISSAO', label: 'ES de Missão' },
   { key: 'EQUIPE_SERVICO_CASAS',  label: 'ES de Casas' },
   { key: 'EQUIPE_SERVICO_CV',     label: 'ES da CV' },
+  { key: 'HIBRIDO',               label: 'Híbrido (taxa única)' },
 ];
 
 interface House {
@@ -92,6 +93,21 @@ interface Registration {
   created_at: string;
 }
 
+interface EligibilityRule {
+  id: string;
+  rule_type: string;       // ORG_UNIT | VOCATIONAL_REALITY
+  org_unit_id: string | null;
+  org_unit_name: string | null;
+  vocational_reality_code: string | null;
+  rule_group: string;      // PARTICIPANT | SERVICE
+}
+
+interface OrgUnit {
+  id: string;
+  name: string;
+  unit_type: string;
+}
+
 interface RetreatDetail {
   id: string;
   title: string;
@@ -107,6 +123,8 @@ interface RetreatDetail {
   registrations_count: number;
   houses: House[];
   fee_types: FeeType[];
+  participant_eligibility_rules: EligibilityRule[];
+  service_eligibility_rules: EligibilityRule[];
 }
 
 export default function AdminRetreatDetailScreen() {
@@ -146,6 +164,14 @@ export default function AdminRetreatDetailScreen() {
 
   // Change role modal
   const [roleModal, setRoleModal] = useState<{ regId: string; currentRole: string } | null>(null);
+
+  // Eligibility rule modal
+  const [eligibilityModal, setEligibilityModal] = useState<{ group: 'PARTICIPANT' | 'SERVICE' } | null>(null);
+  const [ruleType, setRuleType]       = useState<'ORG_UNIT' | 'VOCATIONAL_REALITY'>('ORG_UNIT');
+  const [vocCode, setVocCode]         = useState('');
+  const [orgUnits, setOrgUnits]       = useState<OrgUnit[]>([]);
+  const [selectedOrgUnit, setSelectedOrgUnit] = useState<OrgUnit | null>(null);
+  const [orgUnitsLoaded, setOrgUnitsLoaded]   = useState(false);
 
   const fetchData = async () => {
     try {
@@ -298,6 +324,62 @@ export default function AdminRetreatDetailScreen() {
       await fetchData();
     } catch (err: any) {
       setActionMsg(err?.response?.data?.detail?.message || 'Erro ao mudar papel');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ---- Eligibility rules ----
+  const openEligibilityModal = async (group: 'PARTICIPANT' | 'SERVICE') => {
+    setRuleType('ORG_UNIT');
+    setVocCode('');
+    setSelectedOrgUnit(null);
+    setEligibilityModal({ group });
+    if (!orgUnitsLoaded) {
+      try {
+        const res = await api.get<{ org_units: OrgUnit[] }>('/org/units');
+        setOrgUnits(res.org_units || []);
+        setOrgUnitsLoaded(true);
+      } catch {
+        setOrgUnits([]);
+      }
+    }
+  };
+
+  const handleAddEligibilityRule = async () => {
+    if (!eligibilityModal) return;
+    if (ruleType === 'ORG_UNIT' && !selectedOrgUnit) {
+      setActionMsg('Selecione uma unidade'); return;
+    }
+    if (ruleType === 'VOCATIONAL_REALITY' && !vocCode.trim()) {
+      setActionMsg('Informe o código da realidade vocacional'); return;
+    }
+    setProcessing(true);
+    try {
+      await api.post(`/admin/retreats/${id}/eligibility-rules`, {
+        rule_type: ruleType,
+        org_unit_id: ruleType === 'ORG_UNIT' ? selectedOrgUnit!.id : null,
+        vocational_reality_code: ruleType === 'VOCATIONAL_REALITY' ? vocCode.trim() : null,
+        rule_group: eligibilityModal.group,
+      });
+      setActionMsg('Regra adicionada');
+      setEligibilityModal(null);
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao adicionar regra');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleDeleteEligibilityRule = async (ruleId: string) => {
+    setProcessing(true);
+    try {
+      await api.delete(`/admin/retreats/${id}/eligibility-rules/${ruleId}`);
+      setActionMsg('Regra removida');
+      await fetchData();
+    } catch (err: any) {
+      setActionMsg(err?.response?.data?.detail?.message || 'Erro ao remover regra');
     } finally {
       setProcessing(false);
     }
@@ -515,6 +597,46 @@ export default function AdminRetreatDetailScreen() {
             </View>
           ))}
         </View>
+      )}
+
+      {/* ── Elegibilidade — Participantes ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Quem pode participar ({retreat.participant_eligibility_rules.length})
+        </Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => openEligibilityModal('PARTICIPANT')}>
+          <Ionicons name="add" size={16} color={colors.primary} />
+          <Text style={styles.addBtnText}>Adicionar</Text>
+        </TouchableOpacity>
+      </View>
+      {retreat.participant_eligibility_rules.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>Todos os membros podem participar</Text>
+        </View>
+      ) : (
+        retreat.participant_eligibility_rules.map(rule => (
+          <EligibilityRuleRow key={rule.id} rule={rule} onDelete={() => handleDeleteEligibilityRule(rule.id)} />
+        ))
+      )}
+
+      {/* ── Elegibilidade — Equipe de Serviço ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          Quem pode servir ({retreat.service_eligibility_rules.length})
+        </Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => openEligibilityModal('SERVICE')}>
+          <Ionicons name="add" size={16} color={colors.primary} />
+          <Text style={styles.addBtnText}>Adicionar</Text>
+        </TouchableOpacity>
+      </View>
+      {retreat.service_eligibility_rules.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>Qualquer membro elegível pode servir</Text>
+        </View>
+      ) : (
+        retreat.service_eligibility_rules.map(rule => (
+          <EligibilityRuleRow key={rule.id} rule={rule} onDelete={() => handleDeleteEligibilityRule(rule.id)} />
+        ))
       )}
 
       {/* ── Inscrições ── */}
@@ -793,6 +915,82 @@ export default function AdminRetreatDetailScreen() {
         </View>
       </Modal>
 
+      {/* ── Modal: adicionar regra de elegibilidade ── */}
+      <Modal visible={!!eligibilityModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {eligibilityModal?.group === 'SERVICE' ? 'Quem pode servir' : 'Quem pode participar'}
+            </Text>
+            <Text style={styles.fieldLabel}>Tipo de regra</Text>
+            <View style={styles.modalitySelector}>
+              <TouchableOpacity
+                style={[styles.modalityOption, ruleType === 'ORG_UNIT' && styles.modalityOptionSelected]}
+                onPress={() => setRuleType('ORG_UNIT')}
+              >
+                <Text style={[styles.modalityOptionText, ruleType === 'ORG_UNIT' && { color: colors.white }]}>
+                  Unidade org.
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalityOption, ruleType === 'VOCATIONAL_REALITY' && styles.modalityOptionSelected]}
+                onPress={() => setRuleType('VOCATIONAL_REALITY')}
+              >
+                <Text style={[styles.modalityOptionText, ruleType === 'VOCATIONAL_REALITY' && { color: colors.white }]}>
+                  Real. vocacional
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {ruleType === 'ORG_UNIT' ? (
+              <View>
+                <Text style={styles.fieldLabel}>Selecione a unidade</Text>
+                {orgUnits.length === 0 ? (
+                  <Text style={styles.emptyText}>Carregando unidades...</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                    {orgUnits.map(ou => (
+                      <TouchableOpacity
+                        key={ou.id}
+                        style={[styles.houseOption, selectedOrgUnit?.id === ou.id && styles.houseOptionActive]}
+                        onPress={() => setSelectedOrgUnit(ou)}
+                      >
+                        <Text style={styles.houseOptionText}>{ou.name}</Text>
+                        <Text style={styles.houseOptionSub}>{ou.unit_type}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.fieldLabel}>Código da realidade vocacional</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vocCode}
+                  onChangeText={setVocCode}
+                  placeholder="Ex: MISSAO, CASAS, CV..."
+                  placeholderTextColor="#9ca3af"
+                  autoCapitalize="characters"
+                />
+              </View>
+            )}
+
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.outlineBtn} onPress={() => setEligibilityModal(null)}>
+                <Text style={styles.outlineBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={handleAddEligibilityRule} disabled={processing}>
+                {processing
+                  ? <ActivityIndicator color={colors.white} size="small" />
+                  : <Text style={styles.confirmBtnText}>Adicionar</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ── Modal: mudar papel ── */}
       <Modal visible={!!roleModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
@@ -833,6 +1031,26 @@ function MetaRow({ icon, text }: { icon: string; text: string }) {
     <View style={styles.metaRow}>
       <Ionicons name={icon as any} size={13} color={colors.gray} />
       <Text style={styles.metaText}>{text}</Text>
+    </View>
+  );
+}
+
+function EligibilityRuleRow({ rule, onDelete }: { rule: EligibilityRule; onDelete: () => void }) {
+  const label = rule.rule_type === 'ORG_UNIT'
+    ? rule.org_unit_name ?? rule.org_unit_id ?? '—'
+    : `Vocacional: ${rule.vocational_reality_code}`;
+  const icon = rule.rule_type === 'ORG_UNIT' ? 'git-network-outline' : 'ribbon-outline';
+  return (
+    <View style={styles.houseCard}>
+      <View style={styles.row}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+          <Ionicons name={icon as any} size={16} color={colors.primary} />
+          <Text style={styles.houseName}>{label}</Text>
+        </View>
+        <TouchableOpacity onPress={onDelete} style={styles.iconBtn}>
+          <Ionicons name="trash-outline" size={16} color={colors.red} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

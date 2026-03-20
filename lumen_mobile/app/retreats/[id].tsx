@@ -60,6 +60,12 @@ const REG_STATUS_META: Record<string, { label: string; color: string; icon: stri
   CANCELLED: { label: 'Cancelada', color: colors.gray, icon: 'close-circle-outline', desc: '' },
 };
 
+interface FeeTypeEntry {
+  fee_category: string;
+  label: string;
+  amount_brl: string;
+}
+
 interface FeeInfo {
   fee_category: string;
   fee_label: string;
@@ -92,6 +98,7 @@ interface RetreatDetail {
   max_participants: number | null;
   available_modalities: string[];
   my_fee: FeeInfo | null;
+  fee_types: FeeTypeEntry[];
   my_registration: MyRegistration | null;
 }
 
@@ -342,21 +349,31 @@ export default function RetreatDetailScreen() {
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Inscrição — {retreat.title}</Text>
 
-            {/* Minha taxa */}
-            {retreat.my_fee && (
-              <View style={styles.feeSummary}>
-                <Text style={styles.feeSummaryLabel}>{retreat.my_fee.fee_label}</Text>
-                {retreat.my_fee.amount_brl
-                  ? <Text style={styles.feeSummaryAmount}>R$ {retreat.my_fee.amount_brl}</Text>
-                  : <Text style={styles.feeSummaryFree}>Gratuito</Text>
-                }
-                {retreat.my_fee.amount_brl && (
-                  <Text style={styles.feeSummaryHint}>
-                    Você enviará o comprovante após a inscrição.
-                  </Text>
-                )}
-              </View>
-            )}
+            {/* Taxa dinâmica: híbrido tem taxa própria */}
+            {(() => {
+              const isHybrid = selectedModality === 'HIBRIDO';
+              const hybridFee = isHybrid
+                ? retreat.fee_types.find(ft => ft.fee_category === 'HIBRIDO')
+                : null;
+              const displayFee = isHybrid
+                ? (hybridFee ? { fee_label: 'Híbrido', amount_brl: hybridFee.amount_brl } : { fee_label: 'Híbrido', amount_brl: null })
+                : retreat.my_fee;
+              if (!displayFee) return null;
+              return (
+                <View style={styles.feeSummary}>
+                  <Text style={styles.feeSummaryLabel}>{displayFee.fee_label}</Text>
+                  {displayFee.amount_brl
+                    ? <Text style={styles.feeSummaryAmount}>R$ {displayFee.amount_brl}</Text>
+                    : <Text style={styles.feeSummaryFree}>Gratuito</Text>
+                  }
+                  {displayFee.amount_brl && (
+                    <Text style={styles.feeSummaryHint}>
+                      Você enviará o comprovante após a inscrição.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
 
             {/* Seleção de modalidade (se houver mais de uma) */}
             {hasMultipleModalities && (
