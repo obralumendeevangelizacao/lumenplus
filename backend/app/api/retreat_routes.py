@@ -236,7 +236,6 @@ def _retreat_to_dict(
         "address": retreat.address,
         "max_participants": retreat.max_participants,
         "visibility_type": retreat.visibility_type.value,
-        "eligibility_rules": rules,
         "available_modalities": _available_modalities(retreat),
         "houses": [
             {"id": str(h.id), "name": h.name, "modality": h.modality, "max_participants": h.max_participants}
