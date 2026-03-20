@@ -176,15 +176,10 @@ function RankedRow({
 // -------------------------------------------------------------------------
 
 export default function DashboardScreen() {
-  const { user } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const allowedRoles = ['ADMIN', 'DEV', 'ANALISTA'];
-  const hasAccess =
-    user?.global_roles?.some((r) => allowedRoles.includes(r)) ?? false;
 
   const fetchData = async () => {
     try {
@@ -204,23 +199,15 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    // isLoading do authStore nunca é setado como false neste app —
-    // aguardamos user != null em vez disso
-    if (!user) return;
-    if (hasAccess) {
-      fetchData();
-    } else {
-      setLoading(false);
-    }
-  }, [user, hasAccess]);
+    fetchData();
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  // --- Aguarda user ou dados ---
-  if (!user || loading) {
+  if (loading) {
     return (
       <>
         <Stack.Screen
@@ -233,31 +220,6 @@ export default function DashboardScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.admin} />
           <Text style={styles.loadingText}>Carregando...</Text>
-        </View>
-      </>
-    );
-  }
-
-  // --- No permission ---
-  if (!hasAccess) {
-    return (
-      <>
-        <Stack.Screen
-          options={{
-            title: 'Dashboard',
-            headerStyle: { backgroundColor: colors.admin },
-            headerTintColor: colors.white,
-          }}
-        />
-        <View style={styles.centered}>
-          <Ionicons name="lock-closed-outline" size={48} color={colors.gray} />
-          <Text style={styles.errorTitle}>Acesso Negado</Text>
-          <Text style={styles.errorText}>
-            Esta área é restrita a administradores e analistas.
-          </Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Voltar</Text>
-          </TouchableOpacity>
         </View>
       </>
     );
