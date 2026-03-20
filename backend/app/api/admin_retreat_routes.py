@@ -1,17 +1,23 @@
 """
 Rotas de Retiros — Área Admin
 ==============================
-POST   /admin/retreats                              — criar retiro (DRAFT)
-GET    /admin/retreats                              — listar todos
-GET    /admin/retreats/{id}                         — detalhe
-PATCH  /admin/retreats/{id}                         — editar
-POST   /admin/retreats/{id}/publish                 — publicar (dispara inbox)
-POST   /admin/retreats/{id}/close                   — fechar inscrições
-POST   /admin/retreats/{id}/cancel                  — cancelar retiro
-GET    /admin/retreats/{id}/registrations           — lista de inscrições
-POST   /admin/retreats/{id}/registrations/{reg}/confirm — confirmar pagamento
-POST   /admin/retreats/{id}/registrations/{reg}/reject  — rejeitar comprovante
-GET    /admin/retreats/{id}/export                  — exportar CSV
+POST   /admin/retreats                                         — criar retiro (DRAFT)
+GET    /admin/retreats                                         — listar todos
+GET    /admin/retreats/{id}                                    — detalhe (com casas e taxas)
+PATCH  /admin/retreats/{id}                                    — editar
+POST   /admin/retreats/{id}/publish                            — publicar (dispara inbox)
+POST   /admin/retreats/{id}/close                              — fechar inscrições
+POST   /admin/retreats/{id}/cancel                             — cancelar retiro
+POST   /admin/retreats/{id}/houses                             — adicionar casa
+PUT    /admin/retreats/{id}/houses/{house_id}                  — editar casa
+DELETE /admin/retreats/{id}/houses/{house_id}                  — remover casa
+POST   /admin/retreats/{id}/fee-types                          — definir taxas (bulk upsert)
+GET    /admin/retreats/{id}/registrations                      — lista de inscrições
+POST   /admin/retreats/{id}/registrations/{reg}/confirm        — confirmar pagamento
+POST   /admin/retreats/{id}/registrations/{reg}/reject         — rejeitar comprovante
+PATCH  /admin/retreats/{id}/registrations/{reg}/house          — atribuir casa
+PATCH  /admin/retreats/{id}/registrations/{reg}/role           — mudar papel (PARTICIPANTE/EQUIPE)
+GET    /admin/retreats/{id}/export                             — exportar CSV
 """
 
 import csv
@@ -34,6 +40,8 @@ from app.db.models import (
     Retreat,
     RetreatEligibilityRule,
     RetreatEligibilityRuleType,
+    RetreatFeeType,
+    RetreatHouse,
     RetreatRegistration,
     RetreatStatus,
     RetreatType,
@@ -49,6 +57,19 @@ from app.db.models import (
 router = APIRouter(prefix="/admin/retreats", tags=["Admin — Retreats"])
 
 PERMISSION_MANAGE_RETREATS = "PERMISSION_MANAGE_RETREATS"
+
+FEE_CATEGORY_LABELS = {
+    "PARTICIPANTE": "Participante",
+    "PARTICIPANTE_MISSAO": "Participante de Missão",
+    "PARTICIPANTE_CASAS": "Participante de Casas",
+    "PARTICIPANTE_CV": "Participante da Comunidade de Vida",
+    "EQUIPE_SERVICO": "Equipe de Serviço",
+    "EQUIPE_SERVICO_MISSAO": "Equipe de Serviço de Missão",
+    "EQUIPE_SERVICO_CASAS": "Equipe de Serviço de Casas",
+    "EQUIPE_SERVICO_CV": "Equipe de Serviço da Comunidade de Vida",
+}
+
+ALL_FEE_CATEGORIES = list(FEE_CATEGORY_LABELS.keys())
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +97,30 @@ def _require_retreat_manager(db, user_id: UUID) -> None:
         )
 
 
+def _houses_to_list(houses) -> list[dict]:
+    return [
+        {
+            "id": str(h.id),
+            "name": h.name,
+            "modality": h.modality,
+            "max_participants": h.max_participants,
+        }
+        for h in (houses or [])
+    ]
+
+
+def _fee_types_to_list(fee_types) -> list[dict]:
+    return [
+        {
+            "id": str(ft.id),
+            "fee_category": ft.fee_category,
+            "label": FEE_CATEGORY_LABELS.get(ft.fee_category, ft.fee_category),
+            "amount_brl": ft.amount_brl,
+        }
+        for ft in (fee_types or [])
+    ]
+
+
 def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> dict:
     rules = [
         {
@@ -100,6 +145,8 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
         "price_brl": retreat.price_brl,
         "visibility_type": retreat.visibility_type.value,
         "eligibility_rules": rules,
+        "houses": _houses_to_list(retreat.houses),
+        "fee_types": _fee_types_to_list(retreat.fee_types),
         "created_by_user_id": str(retreat.created_by_user_id) if retreat.created_by_user_id else None,
         "created_at": retreat.created_at.isoformat(),
         "updated_at": retreat.updated_at.isoformat(),
@@ -153,14 +200,12 @@ def _notify_eligible_users(db, retreat: Retreat) -> None:
     if not users:
         return
 
-    from datetime import timedelta
     msg = InboxMessage(
         title=f"🏕️ Novo Retiro: {retreat.title}",
         message=(
             f"Um novo retiro foi publicado: **{retreat.title}**\n\n"
             f"📅 Data: {retreat.start_date.strftime('%d/%m/%Y')} a {retreat.end_date.strftime('%d/%m/%Y')}\n"
-            f"📍 Local: {retreat.location or 'A definir'}\n"
-            f"💰 Valor: R$ {retreat.price_brl or '0,00'}\n\n"
+            f"📍 Local: {retreat.location or 'A definir'}\n\n"
             "Acesse o app para se inscrever!"
         ),
         type=InboxMessageType.INFO,
@@ -216,8 +261,31 @@ class RejectBody(BaseModel):
     reason: str | None = None
 
 
+class HouseBody(BaseModel):
+    name: str
+    modality: str  # PRESENCIAL | HIBRIDO
+    max_participants: int | None = None
+
+
+class FeeTypeInput(BaseModel):
+    fee_category: str
+    amount_brl: str
+
+
+class SetFeeTypesBody(BaseModel):
+    fee_types: list[FeeTypeInput]
+
+
+class AssignHouseBody(BaseModel):
+    house_id: UUID | None = None  # None = desatribuir
+
+
+class SetRoleBody(BaseModel):
+    retreat_role: str  # PARTICIPANTE | EQUIPE_SERVICO
+
+
 # ---------------------------------------------------------------------------
-# Endpoints
+# Endpoints — Retiro CRUD
 # ---------------------------------------------------------------------------
 
 @router.post("", status_code=201)
@@ -306,7 +374,6 @@ async def update_retreat(retreat_id: UUID, body: PatchRetreatBody, current_user:
     if body.visibility_type is not None:
         retreat.visibility_type = RetreatVisibilityType(body.visibility_type)
     if body.eligibility_rules is not None:
-        # Substitui todas as regras
         existing_rules = db.execute(
             select(RetreatEligibilityRule).where(RetreatEligibilityRule.retreat_id == retreat_id)
         ).scalars().all()
@@ -368,7 +435,111 @@ async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSess
 
 
 # ---------------------------------------------------------------------------
-# Registrations
+# Endpoints — Casas
+# ---------------------------------------------------------------------------
+
+@router.post("/{retreat_id}/houses", status_code=201)
+async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession):
+    _require_retreat_manager(db, current_user.id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+    if body.modality not in ("PRESENCIAL", "HIBRIDO"):
+        raise HTTPException(status_code=400, detail={"error": "invalid_modality", "message": "Modalidade deve ser PRESENCIAL ou HIBRIDO"})
+
+    house = RetreatHouse(
+        retreat_id=retreat_id,
+        name=body.name,
+        modality=body.modality,
+        max_participants=body.max_participants,
+    )
+    db.add(house)
+    db.commit()
+    db.refresh(house)
+    return {"id": str(house.id), "name": house.name, "modality": house.modality, "max_participants": house.max_participants}
+
+
+@router.put("/{retreat_id}/houses/{house_id}")
+async def update_house(retreat_id: UUID, house_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession):
+    _require_retreat_manager(db, current_user.id)
+    house = db.get(RetreatHouse, house_id)
+    if not house or house.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada"})
+    if body.modality not in ("PRESENCIAL", "HIBRIDO"):
+        raise HTTPException(status_code=400, detail={"error": "invalid_modality", "message": "Modalidade deve ser PRESENCIAL ou HIBRIDO"})
+
+    house.name = body.name
+    house.modality = body.modality
+    house.max_participants = body.max_participants
+    db.commit()
+    db.refresh(house)
+    return {"id": str(house.id), "name": house.name, "modality": house.modality, "max_participants": house.max_participants}
+
+
+@router.delete("/{retreat_id}/houses/{house_id}", status_code=200)
+async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUser, db: DBSession):
+    _require_retreat_manager(db, current_user.id)
+    house = db.get(RetreatHouse, house_id)
+    if not house or house.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada"})
+    db.delete(house)
+    db.commit()
+    return {"message": "Casa removida"}
+
+
+# ---------------------------------------------------------------------------
+# Endpoints — Taxas
+# ---------------------------------------------------------------------------
+
+@router.post("/{retreat_id}/fee-types")
+async def set_fee_types(retreat_id: UUID, body: SetFeeTypesBody, current_user: CurrentUser, db: DBSession):
+    """Substitui todas as taxas do retiro (bulk upsert)."""
+    _require_retreat_manager(db, current_user.id)
+    retreat = db.get(Retreat, retreat_id)
+    if not retreat:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
+
+    # Valida categorias
+    for ft in body.fee_types:
+        if ft.fee_category not in ALL_FEE_CATEGORIES:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "invalid_category", "message": f"Categoria inválida: {ft.fee_category}"}
+            )
+
+    # Remove todas as taxas existentes e recria
+    existing = db.execute(
+        select(RetreatFeeType).where(RetreatFeeType.retreat_id == retreat_id)
+    ).scalars().all()
+    for ft in existing:
+        db.delete(ft)
+    db.flush()
+
+    created = []
+    for ft_input in body.fee_types:
+        ft = RetreatFeeType(
+            retreat_id=retreat_id,
+            fee_category=ft_input.fee_category,
+            amount_brl=ft_input.amount_brl,
+        )
+        db.add(ft)
+        created.append(ft)
+
+    db.commit()
+    return {
+        "fee_types": [
+            {
+                "fee_category": ft.fee_category,
+                "label": FEE_CATEGORY_LABELS.get(ft.fee_category, ft.fee_category),
+                "amount_brl": ft.amount_brl,
+            }
+            for ft in created
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
+# Endpoints — Inscrições
 # ---------------------------------------------------------------------------
 
 @router.get("/{retreat_id}/registrations")
@@ -387,11 +558,18 @@ async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DB
         profile = db.execute(
             select(UserProfile).where(UserProfile.user_id == reg.user_id)
         ).scalar_one_or_none()
+        house = db.get(RetreatHouse, reg.assigned_house_id) if reg.assigned_house_id else None
         items.append({
             "id": str(reg.id),
             "user_id": str(reg.user_id),
             "user_name": profile.full_name if profile else None,
             "status": reg.status.value,
+            "modality_preference": reg.modality_preference,
+            "retreat_role": reg.retreat_role,
+            "fee_category": reg.fee_category,
+            "fee_label": FEE_CATEGORY_LABELS.get(reg.fee_category, reg.fee_category) if reg.fee_category else None,
+            "assigned_house_id": str(reg.assigned_house_id) if reg.assigned_house_id else None,
+            "assigned_house_name": house.name if house else None,
             "notes": reg.notes,
             "payment_proof_url": reg.payment_proof_url,
             "payment_submitted_at": reg.payment_submitted_at.isoformat() if reg.payment_submitted_at else None,
@@ -438,6 +616,74 @@ async def reject_payment(retreat_id: UUID, registration_id: UUID, body: RejectBo
     return {"message": "Comprovante rejeitado. Membro deverá enviar novo comprovante."}
 
 
+@router.patch("/{retreat_id}/registrations/{registration_id}/house")
+async def assign_house(retreat_id: UUID, registration_id: UUID, body: AssignHouseBody, current_user: CurrentUser, db: DBSession):
+    """Atribui (ou remove) uma casa a uma inscrição."""
+    _require_retreat_manager(db, current_user.id)
+    reg = db.get(RetreatRegistration, registration_id)
+    if not reg or reg.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada"})
+
+    if body.house_id is not None:
+        house = db.get(RetreatHouse, body.house_id)
+        if not house or house.retreat_id != retreat_id:
+            raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Casa não encontrada neste retiro"})
+
+    reg.assigned_house_id = body.house_id
+    db.commit()
+    return {"message": "Casa atribuída" if body.house_id else "Atribuição removida"}
+
+
+@router.patch("/{retreat_id}/registrations/{registration_id}/role")
+async def set_registration_role(retreat_id: UUID, registration_id: UUID, body: SetRoleBody, current_user: CurrentUser, db: DBSession):
+    """Muda o papel do participante (PARTICIPANTE ou EQUIPE_SERVICO) e recalcula fee_category."""
+    _require_retreat_manager(db, current_user.id)
+    if body.retreat_role not in ("PARTICIPANTE", "EQUIPE_SERVICO"):
+        raise HTTPException(status_code=400, detail={"error": "invalid_role", "message": "Papel deve ser PARTICIPANTE ou EQUIPE_SERVICO"})
+
+    reg = db.get(RetreatRegistration, registration_id)
+    if not reg or reg.retreat_id != retreat_id:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Inscrição não encontrada"})
+
+    reg.retreat_role = body.retreat_role
+
+    # Recalcula fee_category com base no novo papel + realidade vocacional do perfil
+    profile = db.execute(
+        select(UserProfile).where(UserProfile.user_id == reg.user_id)
+    ).scalar_one_or_none()
+    voc_code = None
+    if profile and profile.vocational_reality_item_id:
+        from app.db.models import ProfileCatalogItem
+        item = db.execute(
+            select(ProfileCatalogItem).where(ProfileCatalogItem.id == profile.vocational_reality_item_id)
+        ).scalar_one_or_none()
+        if item:
+            voc_code = item.code
+
+    reg.fee_category = _compute_fee_category(body.retreat_role, voc_code)
+    db.commit()
+    return {
+        "retreat_role": reg.retreat_role,
+        "fee_category": reg.fee_category,
+        "fee_label": FEE_CATEGORY_LABELS.get(reg.fee_category, reg.fee_category),
+    }
+
+
+def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None) -> str:
+    """Computa a categoria de taxa a partir do papel e da realidade vocacional."""
+    voc = (vocational_reality_code or "").upper()
+    is_equipe = retreat_role == "EQUIPE_SERVICO"
+    prefix = "EQUIPE_SERVICO" if is_equipe else "PARTICIPANTE"
+
+    if "MISSAO" in voc or "MISSÃO" in voc:
+        return f"{prefix}_MISSAO"
+    if "CASAS" in voc or "CASA" in voc:
+        return f"{prefix}_CASAS"
+    if "CV" in voc or "COMUNIDADE" in voc or "VIDA" in voc:
+        return f"{prefix}_CV"
+    return prefix
+
+
 # ---------------------------------------------------------------------------
 # Export CSV
 # ---------------------------------------------------------------------------
@@ -459,17 +705,23 @@ async def export_registrations_csv(retreat_id: UUID, current_user: CurrentUser, 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Nome", "Status", "Observações", "Comprovante enviado em",
-        "Pagamento confirmado em", "Inscrito em",
+        "Nome", "Status", "Modalidade", "Papel", "Categoria de Taxa",
+        "Casa Atribuída", "Observações",
+        "Comprovante enviado em", "Pagamento confirmado em", "Inscrito em",
     ])
 
     for reg in regs:
         profile = db.execute(
             select(UserProfile).where(UserProfile.user_id == reg.user_id)
         ).scalar_one_or_none()
+        house = db.get(RetreatHouse, reg.assigned_house_id) if reg.assigned_house_id else None
         writer.writerow([
             profile.full_name if profile else str(reg.user_id),
             reg.status.value,
+            reg.modality_preference or "",
+            reg.retreat_role or "PARTICIPANTE",
+            FEE_CATEGORY_LABELS.get(reg.fee_category, reg.fee_category or ""),
+            house.name if house else "",
             reg.notes or "",
             reg.payment_submitted_at.strftime("%d/%m/%Y %H:%M") if reg.payment_submitted_at else "",
             reg.payment_confirmed_at.strftime("%d/%m/%Y %H:%M") if reg.payment_confirmed_at else "",

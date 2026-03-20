@@ -1,13 +1,13 @@
 /**
  * Retreat Detail Screen
  * =====================
- * Exibe detalhes do retiro e permite inscrição/cancelamento.
+ * Exibe detalhes do retiro, modalidades disponíveis, taxa do usuário e permite inscrição/cancelamento.
  */
 
 import { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Modal,
+  ActivityIndicator, RefreshControl, Modal, TextInput,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +25,11 @@ const TYPE_LABEL: Record<string, string> = {
   WEEKEND: 'Fim de semana',
   DAY: 'Dia único',
   FORMATION: 'Formação',
+};
+
+const MODALITY_LABEL: Record<string, string> = {
+  PRESENCIAL: 'Presencial',
+  HIBRIDO: 'Híbrido (dorme em casa)',
 };
 
 const REG_STATUS_META: Record<string, { label: string; color: string; icon: string; desc: string }> = {
@@ -55,6 +60,25 @@ const REG_STATUS_META: Record<string, { label: string; color: string; icon: stri
   CANCELLED: { label: 'Cancelada', color: colors.gray, icon: 'close-circle-outline', desc: '' },
 };
 
+interface FeeInfo {
+  fee_category: string;
+  fee_label: string;
+  amount_brl: string | null;
+}
+
+interface MyRegistration {
+  id: string;
+  status: string;
+  modality_preference: string | null;
+  fee_category: string | null;
+  fee_label: string | null;
+  notes: string | null;
+  payment_proof_url: string | null;
+  payment_submitted_at: string | null;
+  payment_confirmed_at: string | null;
+  payment_rejection_reason: string | null;
+}
+
 interface RetreatDetail {
   id: string;
   title: string;
@@ -66,32 +90,24 @@ interface RetreatDetail {
   location: string | null;
   address: string | null;
   max_participants: number | null;
-  price_brl: string | null;
-  my_registration: {
-    id: string;
-    status: string;
-    notes: string | null;
-    payment_proof_url: string | null;
-    payment_submitted_at: string | null;
-    payment_confirmed_at: string | null;
-    payment_rejection_reason: string | null;
-  } | null;
+  available_modalities: string[];
+  my_fee: FeeInfo | null;
+  my_registration: MyRegistration | null;
 }
 
 export default function RetreatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [retreat, setRetreat]   = useState<RetreatDetail | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+  const [retreat, setRetreat]       = useState<RetreatDetail | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Notes modal
-  const [showRegModal, setShowRegModal] = useState(false);
-  const [notes, setNotes]              = useState('');
-  const [submitting, setSubmitting]    = useState(false);
-  const [actionMsg, setActionMsg]      = useState<string | null>(null);
+  const [showRegModal, setShowRegModal]         = useState(false);
+  const [notes, setNotes]                       = useState('');
+  const [selectedModality, setSelectedModality] = useState<string | null>(null);
+  const [submitting, setSubmitting]             = useState(false);
+  const [actionMsg, setActionMsg]               = useState<string | null>(null);
 
-  // Cancel confirm
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const fetchRetreat = async () => {
@@ -117,15 +133,35 @@ export default function RetreatDetailScreen() {
     setRefreshing(false);
   };
 
+  const openRegModal = () => {
+    const modalities = retreat?.available_modalities ?? [];
+    setSelectedModality(modalities.length === 1 ? modalities[0] : null);
+    setNotes('');
+    setShowRegModal(true);
+  };
+
   const handleRegister = async () => {
+    if (!retreat) return;
+    const modalities = retreat.available_modalities;
+    if (modalities.length > 1 && !selectedModality) {
+      setActionMsg('Selecione a modalidade de participação');
+      return;
+    }
     setSubmitting(true);
     try {
-      const res = await api.post<{ message: string }>(`/retreats/${id}/register`, { notes });
+      const res = await api.post<{ message: string; fee_label?: string; amount_brl?: string }>(
+        `/retreats/${id}/register`,
+        {
+          notes: notes || null,
+          modality_preference: selectedModality ?? (modalities[0] || null),
+        }
+      );
       setActionMsg(res.message);
       setShowRegModal(false);
       await fetchRetreat();
     } catch (err: any) {
       setActionMsg(err?.response?.data?.detail?.message || 'Erro ao realizar inscrição');
+      setShowRegModal(false);
     } finally {
       setSubmitting(false);
     }
@@ -146,9 +182,7 @@ export default function RetreatDetailScreen() {
   };
 
   const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('pt-BR', {
-      day: '2-digit', month: 'long', year: 'numeric',
-    });
+    new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -172,6 +206,7 @@ export default function RetreatDetailScreen() {
   const canSendPayment = reg?.status === 'PENDING_PAYMENT';
   const canCancel = reg && !['CONFIRMED', 'CANCELLED'].includes(reg.status);
   const isClosed = retreat.status === 'CLOSED';
+  const hasMultipleModalities = retreat.available_modalities.length > 1;
 
   return (
     <ScrollView
@@ -186,14 +221,68 @@ export default function RetreatDetailScreen() {
       <Text style={styles.title}>{retreat.title}</Text>
       {retreat.description && <Text style={styles.description}>{retreat.description}</Text>}
 
-      {/* Info cards */}
+      {/* Info card */}
       <View style={styles.infoGrid}>
         <InfoRow icon="calendar-outline" label="Data" value={`${formatDate(retreat.start_date)} → ${formatDate(retreat.end_date)}`} />
         {retreat.location && <InfoRow icon="location-outline" label="Local" value={retreat.location} />}
         {retreat.address && <InfoRow icon="map-outline" label="Endereço" value={retreat.address} />}
-        <InfoRow icon="cash-outline" label="Valor" value={retreat.price_brl ? `R$ ${retreat.price_brl}` : 'Gratuito'} />
-        {retreat.max_participants && (
+        {retreat.max_participants != null && (
           <InfoRow icon="people-outline" label="Vagas" value={`${retreat.max_participants} vagas`} />
+        )}
+
+        {/* Modalidades disponíveis */}
+        {retreat.available_modalities.length > 0 && (
+          <View style={styles.infoRow}>
+            <Ionicons name="home-outline" size={18} color={colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoLabel}>Modalidades</Text>
+              <View style={styles.modalityChips}>
+                {retreat.available_modalities.map(m => (
+                  <View key={m} style={styles.modalityChip}>
+                    <Text style={styles.modalityChipText}>{MODALITY_LABEL[m] ?? m}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Minha taxa */}
+        {retreat.my_fee && (
+          <View style={styles.feeRow}>
+            <Ionicons name="cash-outline" size={18} color={colors.primary} />
+            <View>
+              <Text style={styles.infoLabel}>Minha taxa</Text>
+              <Text style={styles.infoValue}>{retreat.my_fee.fee_label}</Text>
+              {retreat.my_fee.amount_brl && (
+                <Text style={styles.feeAmount}>R$ {retreat.my_fee.amount_brl}</Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Taxa da minha inscrição (se já inscrito) */}
+        {reg?.fee_label && reg.fee_label !== retreat.my_fee?.fee_label && (
+          <View style={styles.infoRow}>
+            <Ionicons name="pricetag-outline" size={18} color="#7c3aed" />
+            <View>
+              <Text style={styles.infoLabel}>Taxa atribuída</Text>
+              <Text style={[styles.infoValue, { color: '#7c3aed' }]}>{reg.fee_label}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Modalidade da minha inscrição */}
+        {reg?.modality_preference && (
+          <View style={styles.infoRow}>
+            <Ionicons name="checkbox-outline" size={18} color="#059669" />
+            <View>
+              <Text style={styles.infoLabel}>Minha modalidade</Text>
+              <Text style={[styles.infoValue, { color: '#059669' }]}>
+                {MODALITY_LABEL[reg.modality_preference] ?? reg.modality_preference}
+              </Text>
+            </View>
+          </View>
         )}
       </View>
 
@@ -225,7 +314,7 @@ export default function RetreatDetailScreen() {
 
       {/* CTA Buttons */}
       {!isClosed && canRegister && (
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => setShowRegModal(true)} disabled={submitting}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={openRegModal} disabled={submitting}>
           <Ionicons name="person-add-outline" size={20} color={colors.white} />
           <Text style={styles.primaryBtnText}>Inscrever-se</Text>
         </TouchableOpacity>
@@ -252,18 +341,65 @@ export default function RetreatDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Inscrição — {retreat.title}</Text>
-            <Text style={styles.modalSubtitle}>
-              {retreat.price_brl
-                ? `Valor: R$ ${retreat.price_brl} · Você enviará o comprovante após a inscrição.`
-                : 'Este retiro é gratuito.'}
-            </Text>
+
+            {/* Minha taxa */}
+            {retreat.my_fee && (
+              <View style={styles.feeSummary}>
+                <Text style={styles.feeSummaryLabel}>{retreat.my_fee.fee_label}</Text>
+                {retreat.my_fee.amount_brl
+                  ? <Text style={styles.feeSummaryAmount}>R$ {retreat.my_fee.amount_brl}</Text>
+                  : <Text style={styles.feeSummaryFree}>Gratuito</Text>
+                }
+                {retreat.my_fee.amount_brl && (
+                  <Text style={styles.feeSummaryHint}>
+                    Você enviará o comprovante após a inscrição.
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Seleção de modalidade (se houver mais de uma) */}
+            {hasMultipleModalities && (
+              <View>
+                <Text style={styles.fieldLabel}>Modalidade de participação *</Text>
+                <View style={styles.modalitySelector}>
+                  {retreat.available_modalities.map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      style={[
+                        styles.modalityOption,
+                        selectedModality === m && styles.modalityOptionSelected,
+                      ]}
+                      onPress={() => setSelectedModality(m)}
+                    >
+                      <Ionicons
+                        name={m === 'PRESENCIAL' ? 'home' : 'moon-outline'}
+                        size={18}
+                        color={selectedModality === m ? colors.white : colors.primary}
+                      />
+                      <Text style={[
+                        styles.modalityOptionText,
+                        selectedModality === m && { color: colors.white },
+                      ]}>
+                        {MODALITY_LABEL[m] ?? m}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <Text style={styles.fieldLabel}>Observações (opcional)</Text>
-            <View style={styles.textArea}>
-              <Text style={{ color: notes ? '#111827' : '#9ca3af', minHeight: 60 }}
-                onPress={() => {/* handled via TextInput below */}}>
-              </Text>
-            </View>
-            {/* Use a real TextInput */}
+            <TextInput
+              style={styles.textArea}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Alguma observação para a equipe..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              numberOfLines={3}
+            />
+
             <View style={styles.row}>
               <TouchableOpacity style={styles.outlineBtn} onPress={() => setShowRegModal(false)}>
                 <Text style={styles.outlineBtnText}>Cancelar</Text>
@@ -285,7 +421,7 @@ export default function RetreatDetailScreen() {
           <View style={styles.modalBox}>
             <Ionicons name="warning-outline" size={40} color={colors.red} style={{ alignSelf: 'center', marginBottom: 12 }} />
             <Text style={styles.modalTitle}>Cancelar inscrição?</Text>
-            <Text style={styles.modalSubtitle}>Sua inscrição no retiro será cancelada. Você poderá se inscrever novamente se houver vagas.</Text>
+            <Text style={styles.modalSubtitle}>Sua inscrição será cancelada. Você poderá se inscrever novamente se houver vagas.</Text>
             <View style={styles.row}>
               <TouchableOpacity style={styles.outlineBtn} onPress={() => setShowCancelConfirm(false)}>
                 <Text style={styles.outlineBtnText}>Voltar</Text>
@@ -305,7 +441,7 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value: s
   return (
     <View style={styles.infoRow}>
       <Ionicons name={icon as any} size={18} color={colors.primary} />
-      <View>
+      <View style={{ flex: 1 }}>
         <Text style={styles.infoLabel}>{label}</Text>
         <Text style={styles.infoValue}>{value}</Text>
       </View>
@@ -329,8 +465,16 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   infoRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  feeRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   infoLabel: { fontSize: 11, color: colors.gray, textTransform: 'uppercase', letterSpacing: 0.5 },
   infoValue: { fontSize: 14, color: '#111827', fontWeight: '500', marginTop: 1 },
+  feeAmount: { fontSize: 16, fontWeight: '800', color: colors.primary, marginTop: 2 },
+  modalityChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  modalityChip: {
+    backgroundColor: `${colors.primary}15`, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  modalityChipText: { fontSize: 13, color: colors.primary, fontWeight: '600' },
   regCard: {
     flexDirection: 'row', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1,
     alignItems: 'flex-start',
@@ -359,7 +503,7 @@ const styles = StyleSheet.create({
   btnText: { color: colors.white, fontWeight: '600' },
   // Modal
   modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center', padding: 24,
   },
   modalBox: {
@@ -368,9 +512,25 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center' },
   modalSubtitle: { fontSize: 13, color: colors.gray, textAlign: 'center', lineHeight: 18 },
+  feeSummary: {
+    backgroundColor: `${colors.primary}0F`, borderRadius: 12, padding: 12, alignItems: 'center',
+  },
+  feeSummaryLabel: { fontSize: 12, color: colors.gray, textTransform: 'uppercase' },
+  feeSummaryAmount: { fontSize: 22, fontWeight: '800', color: colors.primary },
+  feeSummaryFree: { fontSize: 16, fontWeight: '700', color: '#059669' },
+  feeSummaryHint: { fontSize: 11, color: colors.gray, marginTop: 4, textAlign: 'center' },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  modalitySelector: { flexDirection: 'row', gap: 8 },
+  modalityOption: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1.5, borderColor: colors.primary, borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 8,
+  },
+  modalityOptionSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  modalityOptionText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   textArea: {
-    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10, minHeight: 70,
+    borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10,
+    minHeight: 70, textAlignVertical: 'top', fontSize: 14, color: '#111827',
   },
   row: { flexDirection: 'row', gap: 10, marginTop: 4 },
   outlineBtn: {

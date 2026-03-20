@@ -731,6 +731,27 @@ class RetreatType(enum.Enum):
     FORMATION = "FORMATION"
 
 
+class RetreatModality(enum.Enum):
+    PRESENCIAL = "PRESENCIAL"
+    HIBRIDO = "HIBRIDO"
+
+
+class RetreatRole(enum.Enum):
+    PARTICIPANTE = "PARTICIPANTE"
+    EQUIPE_SERVICO = "EQUIPE_SERVICO"
+
+
+class FeeCategory(enum.Enum):
+    PARTICIPANTE = "PARTICIPANTE"
+    PARTICIPANTE_MISSAO = "PARTICIPANTE_MISSAO"
+    PARTICIPANTE_CASAS = "PARTICIPANTE_CASAS"
+    PARTICIPANTE_CV = "PARTICIPANTE_CV"
+    EQUIPE_SERVICO = "EQUIPE_SERVICO"
+    EQUIPE_SERVICO_MISSAO = "EQUIPE_SERVICO_MISSAO"
+    EQUIPE_SERVICO_CASAS = "EQUIPE_SERVICO_CASAS"
+    EQUIPE_SERVICO_CV = "EQUIPE_SERVICO_CV"
+
+
 class RetreatStatus(enum.Enum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
@@ -799,6 +820,12 @@ class Retreat(Base):
     registrations: Mapped[list["RetreatRegistration"]] = relationship(
         "RetreatRegistration", back_populates="retreat", cascade="all, delete-orphan"
     )
+    houses: Mapped[list["RetreatHouse"]] = relationship(
+        "RetreatHouse", back_populates="retreat", cascade="all, delete-orphan"
+    )
+    fee_types: Mapped[list["RetreatFeeType"]] = relationship(
+        "RetreatFeeType", back_populates="retreat", cascade="all, delete-orphan"
+    )
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
 
 
@@ -842,6 +869,12 @@ class RetreatRegistration(Base):
         default=RegistrationStatus.PENDING_PAYMENT,
         server_default="PENDING_PAYMENT",
     )
+    modality_preference: Mapped[str | None] = mapped_column(Text, nullable=True)  # PRESENCIAL | HIBRIDO
+    retreat_role: Mapped[str] = mapped_column(Text, nullable=False, server_default="PARTICIPANTE")
+    fee_category: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_house_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreat_houses.id", ondelete="SET NULL"), nullable=True
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -874,3 +907,37 @@ class RetreatRegistration(Base):
         "User", foreign_keys=[payment_rejected_by_user_id]
     )
     cancelled_by: Mapped["User | None"] = relationship("User", foreign_keys=[cancelled_by_user_id])
+    assigned_house: Mapped["RetreatHouse | None"] = relationship("RetreatHouse", foreign_keys=[assigned_house_id])
+
+
+class RetreatHouse(Base):
+    __tablename__ = "retreat_houses"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    modality: Mapped[str] = mapped_column(Text, nullable=False)  # PRESENCIAL | HIBRIDO
+    max_participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="houses")
+
+
+class RetreatFeeType(Base):
+    __tablename__ = "retreat_fee_types"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    fee_category: Mapped[str] = mapped_column(Text, nullable=False)
+    amount_brl: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    __table_args__ = (UniqueConstraint("retreat_id", "fee_category", name="uq_retreat_fee_category"),)
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="fee_types")

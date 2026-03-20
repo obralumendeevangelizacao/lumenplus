@@ -2,8 +2,8 @@
 Rotas de Retiros — Área do Membro
 ==================================
 GET  /retreats                    — lista retiros visíveis para o usuário logado
-GET  /retreats/{id}               — detalhe do retiro + meu status de inscrição
-POST /retreats/{id}/register      — inscrever-se no retiro
+GET  /retreats/{id}               — detalhe do retiro + meu status de inscrição + minha taxa
+POST /retreats/{id}/register      — inscrever-se no retiro (com preferência de modalidade)
 DELETE /retreats/{id}/my-registration — cancelar minha inscrição
 POST /retreats/{id}/my-registration/payment — enviar comprovante de pagamento
 """
@@ -21,9 +21,12 @@ from app.api.deps import CurrentUser, DBSession
 from app.db.models import (
     OrgMembership,
     OrgUnit,
+    ProfileCatalogItem,
     Retreat,
     RetreatEligibilityRule,
     RetreatEligibilityRuleType,
+    RetreatFeeType,
+    RetreatHouse,
     RetreatRegistration,
     RetreatStatus,
     RetreatVisibilityType,
@@ -38,13 +41,23 @@ router = APIRouter(prefix="/retreats", tags=["Retreats"])
 
 PERMISSION_MANAGE_RETREATS = "PERMISSION_MANAGE_RETREATS"
 
+FEE_CATEGORY_LABELS = {
+    "PARTICIPANTE": "Participante",
+    "PARTICIPANTE_MISSAO": "Participante de Missão",
+    "PARTICIPANTE_CASAS": "Participante de Casas",
+    "PARTICIPANTE_CV": "Participante da Comunidade de Vida",
+    "EQUIPE_SERVICO": "Equipe de Serviço",
+    "EQUIPE_SERVICO_MISSAO": "Equipe de Serviço de Missão",
+    "EQUIPE_SERVICO_CASAS": "Equipe de Serviço de Casas",
+    "EQUIPE_SERVICO_CV": "Equipe de Serviço da Comunidade de Vida",
+}
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def _is_retreat_manager(db, user_id: UUID) -> bool:
-    """Verifica se o usuário tem permissão de gerenciar retiros ou é admin/dev."""
     from app.db.models import GlobalRole, UserGlobalRole
     roles = db.execute(
         select(GlobalRole.code)
@@ -63,7 +76,6 @@ def _is_retreat_manager(db, user_id: UUID) -> bool:
 
 
 def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
-    """Verifica se o usuário é elegível para um retiro SPECIFIC."""
     if retreat.visibility_type == RetreatVisibilityType.ALL:
         return True
 
@@ -72,9 +84,8 @@ def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
     ).scalars().all()
 
     if not rules:
-        return True  # sem regras = todos podem
+        return True
 
-    # Checa se alguma regra bate com o usuário
     for rule in rules:
         if rule.rule_type == RetreatEligibilityRuleType.ORG_UNIT:
             membership = db.execute(
@@ -91,8 +102,6 @@ def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
                 select(UserProfile).where(UserProfile.user_id == user_id)
             ).scalar_one_or_none()
             if profile and profile.vocational_reality_item_id:
-                # Compara o code do item com o code da regra
-                from app.db.models import ProfileCatalogItem
                 item = db.execute(
                     select(ProfileCatalogItem).where(
                         ProfileCatalogItem.id == profile.vocational_reality_item_id
@@ -103,7 +112,68 @@ def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
     return False
 
 
-def _retreat_to_dict(retreat: Retreat, registration: RetreatRegistration | None = None) -> dict:
+def _compute_fee_category(retreat_role: str, vocational_reality_code: str | None) -> str:
+    voc = (vocational_reality_code or "").upper()
+    is_equipe = retreat_role == "EQUIPE_SERVICO"
+    prefix = "EQUIPE_SERVICO" if is_equipe else "PARTICIPANTE"
+
+    if "MISSAO" in voc or "MISSÃO" in voc:
+        return f"{prefix}_MISSAO"
+    if "CASAS" in voc or "CASA" in voc:
+        return f"{prefix}_CASAS"
+    if "CV" in voc or "COMUNIDADE" in voc or "VIDA" in voc:
+        return f"{prefix}_CV"
+    return prefix
+
+
+def _get_user_voc_code(db, user_id: UUID) -> str | None:
+    profile = db.execute(
+        select(UserProfile).where(UserProfile.user_id == user_id)
+    ).scalar_one_or_none()
+    if profile and profile.vocational_reality_item_id:
+        item = db.execute(
+            select(ProfileCatalogItem).where(ProfileCatalogItem.id == profile.vocational_reality_item_id)
+        ).scalar_one_or_none()
+        if item:
+            return item.code
+    return None
+
+
+def _get_user_fee_info(db, user_id: UUID, retreat: Retreat) -> dict | None:
+    """Retorna a taxa esperada do usuário (categoria + valor) para o retiro."""
+    voc_code = _get_user_voc_code(db, user_id)
+    fee_cat = _compute_fee_category("PARTICIPANTE", voc_code)  # default role PARTICIPANTE
+    fee_type = db.execute(
+        select(RetreatFeeType).where(
+            RetreatFeeType.retreat_id == retreat.id,
+            RetreatFeeType.fee_category == fee_cat,
+        )
+    ).scalar_one_or_none()
+    return {
+        "fee_category": fee_cat,
+        "fee_label": FEE_CATEGORY_LABELS.get(fee_cat, fee_cat),
+        "amount_brl": fee_type.amount_brl if fee_type else None,
+    }
+
+
+def _available_modalities(retreat: Retreat) -> list[str]:
+    """Retorna as modalidades disponíveis com base nas casas do retiro."""
+    if not retreat.houses:
+        return []
+    seen = set()
+    result = []
+    for h in retreat.houses:
+        if h.modality not in seen:
+            seen.add(h.modality)
+            result.append(h.modality)
+    return result
+
+
+def _retreat_to_dict(
+    retreat: Retreat,
+    registration: RetreatRegistration | None = None,
+    user_fee_info: dict | None = None,
+) -> dict:
     rules = [
         {
             "rule_type": r.rule_type.value,
@@ -123,15 +193,33 @@ def _retreat_to_dict(retreat: Retreat, registration: RetreatRegistration | None 
         "location": retreat.location,
         "address": retreat.address,
         "max_participants": retreat.max_participants,
-        "price_brl": retreat.price_brl,
         "visibility_type": retreat.visibility_type.value,
         "eligibility_rules": rules,
+        "available_modalities": _available_modalities(retreat),
+        "houses": [
+            {"id": str(h.id), "name": h.name, "modality": h.modality, "max_participants": h.max_participants}
+            for h in (retreat.houses or [])
+        ],
+        "fee_types": [
+            {
+                "fee_category": ft.fee_category,
+                "label": FEE_CATEGORY_LABELS.get(ft.fee_category, ft.fee_category),
+                "amount_brl": ft.amount_brl,
+            }
+            for ft in (retreat.fee_types or [])
+        ],
+        "my_fee": user_fee_info,
         "created_at": retreat.created_at.isoformat(),
     }
     if registration:
         result["my_registration"] = {
             "id": str(registration.id),
             "status": registration.status.value,
+            "modality_preference": registration.modality_preference,
+            "retreat_role": registration.retreat_role,
+            "fee_category": registration.fee_category,
+            "fee_label": FEE_CATEGORY_LABELS.get(registration.fee_category, registration.fee_category) if registration.fee_category else None,
+            "assigned_house_id": str(registration.assigned_house_id) if registration.assigned_house_id else None,
             "notes": registration.notes,
             "payment_proof_url": registration.payment_proof_url,
             "payment_submitted_at": registration.payment_submitted_at.isoformat() if registration.payment_submitted_at else None,
@@ -143,14 +231,25 @@ def _retreat_to_dict(retreat: Retreat, registration: RetreatRegistration | None 
     return result
 
 
-def _spots_available(db, retreat: Retreat) -> bool:
-    if retreat.max_participants is None:
-        return True
-    confirmed_count = sum(
-        1 for r in retreat.registrations
-        if r.status not in (RegistrationStatus.CANCELLED,)
-    )
-    return confirmed_count < retreat.max_participants
+def _spots_available(db, retreat: Retreat, modality: str | None = None) -> bool:
+    """Verifica vagas globais e, se informado, vagas por modalidade."""
+    active_regs = [r for r in retreat.registrations if r.status != RegistrationStatus.CANCELLED]
+
+    # Verifica limite global
+    if retreat.max_participants is not None:
+        if len(active_regs) >= retreat.max_participants:
+            return False
+
+    # Verifica limite por modalidade (soma das capacidades das casas dessa modalidade)
+    if modality and retreat.houses:
+        modality_houses = [h for h in retreat.houses if h.modality == modality]
+        modality_capacity = sum(h.max_participants for h in modality_houses if h.max_participants is not None)
+        if modality_capacity > 0:
+            modality_regs = sum(1 for r in active_regs if r.modality_preference == modality)
+            if modality_regs >= modality_capacity:
+                return False
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -174,14 +273,15 @@ async def list_retreats(current_user: CurrentUser, db: DBSession):
                 RetreatRegistration.user_id == current_user.id,
             )
         ).scalar_one_or_none()
-        result.append(_retreat_to_dict(retreat, reg))
+        user_fee = _get_user_fee_info(db, current_user.id, retreat)
+        result.append(_retreat_to_dict(retreat, reg, user_fee))
 
     return {"retreats": result}
 
 
 @router.get("/{retreat_id}")
 async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    """Detalhe do retiro + status da minha inscrição."""
+    """Detalhe do retiro + status da minha inscrição + minha taxa."""
     retreat = db.get(Retreat, retreat_id)
     if not retreat or retreat.status not in (RetreatStatus.PUBLISHED, RetreatStatus.CLOSED):
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Retiro não encontrado"})
@@ -196,11 +296,13 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
         )
     ).scalar_one_or_none()
 
-    return _retreat_to_dict(retreat, reg)
+    user_fee = _get_user_fee_info(db, current_user.id, retreat)
+    return _retreat_to_dict(retreat, reg, user_fee)
 
 
 class RegisterBody(BaseModel):
     notes: str | None = None
+    modality_preference: str | None = None  # PRESENCIAL | HIBRIDO
 
 
 @router.post("/{retreat_id}/register", status_code=201)
@@ -213,6 +315,23 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
     if not _user_eligible_for_retreat(db, current_user.id, retreat):
         raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Você não é elegível para este retiro"})
 
+    # Valida modalidade
+    available_modalities = _available_modalities(retreat)
+    modality = body.modality_preference
+    if available_modalities:
+        if len(available_modalities) > 1 and not modality:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "modality_required", "message": "Selecione a modalidade de participação"}
+            )
+        if modality and modality not in available_modalities:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "invalid_modality", "message": f"Modalidade '{modality}' não disponível neste retiro"}
+            )
+        if not modality and len(available_modalities) == 1:
+            modality = available_modalities[0]
+
     existing = db.execute(
         select(RetreatRegistration).where(
             RetreatRegistration.retreat_id == retreat_id,
@@ -222,17 +341,22 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
     if existing and existing.status != RegistrationStatus.CANCELLED:
         raise HTTPException(status_code=409, detail={"error": "already_registered", "message": "Você já está inscrito neste retiro"})
 
+    # Calcula fee_category
+    voc_code = _get_user_voc_code(db, current_user.id)
+    fee_category = _compute_fee_category("PARTICIPANTE", voc_code)
+
     # Verifica vagas
-    if not _spots_available(db, retreat):
-        # Coloca em lista de espera
+    if not _spots_available(db, retreat, modality):
         status = RegistrationStatus.WAITLIST
     else:
         status = RegistrationStatus.PENDING_PAYMENT
 
     if existing:
-        # Reativar inscrição cancelada
         existing.status = status
         existing.notes = body.notes
+        existing.modality_preference = modality
+        existing.fee_category = fee_category
+        existing.retreat_role = "PARTICIPANTE"
         existing.cancelled_at = None
         existing.cancelled_by_user_id = None
         existing.payment_proof_url = None
@@ -244,22 +368,40 @@ async def register_for_retreat(retreat_id: UUID, body: RegisterBody, current_use
             user_id=current_user.id,
             status=status,
             notes=body.notes,
+            modality_preference=modality,
+            retreat_role="PARTICIPANTE",
+            fee_category=fee_category,
         )
         db.add(reg)
 
     db.commit()
     db.refresh(reg)
 
+    # Descobre valor da taxa
+    fee_type = db.execute(
+        select(RetreatFeeType).where(
+            RetreatFeeType.retreat_id == retreat_id,
+            RetreatFeeType.fee_category == fee_category,
+        )
+    ).scalar_one_or_none()
+
     return {
         "id": str(reg.id),
         "status": reg.status.value,
-        "message": "Inscrição realizada com sucesso" if status != RegistrationStatus.WAITLIST else "Vagas esgotadas — você foi adicionado à lista de espera",
+        "modality_preference": reg.modality_preference,
+        "fee_category": reg.fee_category,
+        "fee_label": FEE_CATEGORY_LABELS.get(fee_category, fee_category),
+        "amount_brl": fee_type.amount_brl if fee_type else None,
+        "message": (
+            "Inscrição realizada com sucesso"
+            if status != RegistrationStatus.WAITLIST
+            else "Vagas esgotadas — você foi adicionado à lista de espera"
+        ),
     }
 
 
 @router.delete("/{retreat_id}/my-registration", status_code=200)
 async def cancel_my_registration(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
-    """Cancela a inscrição do usuário no retiro."""
     reg = db.execute(
         select(RetreatRegistration).where(
             RetreatRegistration.retreat_id == retreat_id,
@@ -299,11 +441,9 @@ async def submit_payment_proof(
     if reg.status == RegistrationStatus.CONFIRMED:
         raise HTTPException(status_code=409, detail={"error": "already_confirmed", "message": "Pagamento já confirmado"})
 
-    # Valida tipo do arquivo
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail={"error": "invalid_file", "message": "Apenas imagens são aceitas"})
 
-    # Configura e envia ao Cloudinary
     cloudinary.config(
         cloud_name=settings.cloudinary_cloud_name,
         api_key=settings.cloudinary_api_key,
