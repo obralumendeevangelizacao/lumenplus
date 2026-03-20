@@ -189,11 +189,13 @@ export default function DashboardScreen() {
   const fetchData = async () => {
     try {
       setError(null);
-      const response = await api.get('/admin/dashboard');
-      setData(response.data);
+      // api retorna o JSON diretamente (não é axios — não há .data)
+      const data = await api.get<DashboardData>('/admin/dashboard');
+      setData(data);
     } catch (err: any) {
       const msg =
-        err.response?.data?.detail?.message ||
+        err?.response?.data?.detail?.message ||
+        err?.message ||
         'Erro ao carregar dados do dashboard';
       setError(msg);
     } finally {
