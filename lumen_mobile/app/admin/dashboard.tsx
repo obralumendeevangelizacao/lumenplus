@@ -176,7 +176,7 @@ function RankedRow({
 // -------------------------------------------------------------------------
 
 export default function DashboardScreen() {
-  const { user } = useAuthStore();
+  const { user, isLoading: authLoading } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -203,17 +203,38 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
+    // Aguarda o auth store terminar de inicializar antes de checar permissão
+    if (authLoading) return;
     if (hasAccess) {
       fetchData();
     } else {
       setLoading(false);
     }
-  }, [hasAccess]);
+  }, [hasAccess, authLoading]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
+
+  // --- Aguarda auth inicializar ---
+  if (authLoading || (loading && !data && !error)) {
+    return (
+      <>
+        <Stack.Screen
+          options={{
+            title: 'Dashboard',
+            headerStyle: { backgroundColor: colors.admin },
+            headerTintColor: colors.white,
+          }}
+        />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.admin} />
+          <Text style={styles.loadingText}>Carregando...</Text>
+        </View>
+      </>
+    );
+  }
 
   // --- No permission ---
   if (!hasAccess) {
