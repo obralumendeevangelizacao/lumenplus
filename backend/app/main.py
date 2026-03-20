@@ -11,15 +11,36 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
+import sentry_sdk
 import structlog
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 
 # Fonte canônica de settings
 from app.settings import settings
+
+# Sentry — inicializa antes de tudo para capturar erros de startup
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        release=f"lumenplus-backend@{settings.app_version}",
+        # LGPD: não enviar dados pessoais automaticamente
+        send_default_pii=False,
+        # Performance: 10% das requisições em produção
+        traces_sample_rate=0.1 if settings.is_production else 0.0,
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+        ],
+    )
 
 # Configura logging
 structlog.configure(

@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # =========================================================================
     firebase_project_id: str = Field(default="")
 
+    # Sentry (opcional — monitoramento de erros)
+    sentry_dsn: str = Field(default="")
+
     # =========================================================================
     # FEATURE FLAGS
     # =========================================================================
