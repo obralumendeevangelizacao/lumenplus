@@ -176,7 +176,7 @@ function RankedRow({
 // -------------------------------------------------------------------------
 
 export default function DashboardScreen() {
-  const { user, isLoading: authLoading } = useAuthStore();
+  const { user } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -189,9 +189,8 @@ export default function DashboardScreen() {
   const fetchData = async () => {
     try {
       setError(null);
-      // api retorna o JSON diretamente (não é axios — não há .data)
-      const data = await api.get<DashboardData>('/admin/dashboard');
-      setData(data);
+      const result = await api.get<DashboardData>('/admin/dashboard');
+      setData(result);
     } catch (err: any) {
       const msg =
         err?.response?.data?.detail?.message ||
@@ -205,21 +204,23 @@ export default function DashboardScreen() {
   };
 
   useEffect(() => {
-    if (authLoading) return;   // aguarda auth inicializar
+    // isLoading do authStore nunca é setado como false neste app —
+    // aguardamos user != null em vez disso
+    if (!user) return;
     if (hasAccess) {
       fetchData();
     } else {
-      setLoading(false);       // sem permissão → para o spinner
+      setLoading(false);
     }
-  }, [authLoading, hasAccess]);
+  }, [user, hasAccess]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  // --- Auth ou dados carregando ---
-  if (authLoading || loading) {
+  // --- Aguarda user ou dados ---
+  if (!user || loading) {
     return (
       <>
         <Stack.Screen
