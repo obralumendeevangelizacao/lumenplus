@@ -720,3 +720,157 @@ class SensitiveAccessRequest(Base):
     requester: Mapped["User"] = relationship("User", foreign_keys=[requester_user_id])
     target: Mapped["User"] = relationship("User", foreign_keys=[target_user_id])
     approved_by: Mapped["User | None"] = relationship("User", foreign_keys=[approved_by_user_id])
+
+
+# === RETIROS ===
+
+
+class RetreatType(enum.Enum):
+    WEEKEND = "WEEKEND"
+    DAY = "DAY"
+    FORMATION = "FORMATION"
+
+
+class RetreatStatus(enum.Enum):
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
+
+
+class RetreatVisibilityType(enum.Enum):
+    ALL = "ALL"
+    SPECIFIC = "SPECIFIC"
+
+
+class RetreatEligibilityRuleType(enum.Enum):
+    ORG_UNIT = "ORG_UNIT"
+    VOCATIONAL_REALITY = "VOCATIONAL_REALITY"
+
+
+class RegistrationStatus(enum.Enum):
+    PENDING_PAYMENT = "PENDING_PAYMENT"
+    PAYMENT_SUBMITTED = "PAYMENT_SUBMITTED"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+    WAITLIST = "WAITLIST"
+
+
+class Retreat(Base):
+    __tablename__ = "retreats"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retreat_type: Mapped[RetreatType] = mapped_column(
+        Enum(RetreatType, name="retreat_type", create_constraint=False), nullable=False
+    )
+    status: Mapped[RetreatStatus] = mapped_column(
+        Enum(RetreatStatus, name="retreat_status", create_constraint=False),
+        nullable=False,
+        default=RetreatStatus.DRAFT,
+        server_default="DRAFT",
+    )
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    location: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_participants: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_brl: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    visibility_type: Mapped[RetreatVisibilityType] = mapped_column(
+        Enum(RetreatVisibilityType, name="retreat_visibility_type", create_constraint=False),
+        nullable=False,
+        default=RetreatVisibilityType.ALL,
+        server_default="ALL",
+    )
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    eligibility_rules: Mapped[list["RetreatEligibilityRule"]] = relationship(
+        "RetreatEligibilityRule", back_populates="retreat", cascade="all, delete-orphan"
+    )
+    registrations: Mapped[list["RetreatRegistration"]] = relationship(
+        "RetreatRegistration", back_populates="retreat", cascade="all, delete-orphan"
+    )
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class RetreatEligibilityRule(Base):
+    __tablename__ = "retreat_eligibility_rules"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    rule_type: Mapped[RetreatEligibilityRuleType] = mapped_column(
+        Enum(RetreatEligibilityRuleType, name="retreat_eligibility_rule_type", create_constraint=False),
+        nullable=False,
+    )
+    org_unit_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("org_units.id", ondelete="CASCADE"), nullable=True
+    )
+    vocational_reality_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="eligibility_rules")
+    org_unit: Mapped["OrgUnit | None"] = relationship("OrgUnit")
+
+
+class RetreatRegistration(Base):
+    __tablename__ = "retreat_registrations"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    retreat_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[RegistrationStatus] = mapped_column(
+        Enum(RegistrationStatus, name="registration_status", create_constraint=False),
+        nullable=False,
+        default=RegistrationStatus.PENDING_PAYMENT,
+        server_default="PENDING_PAYMENT",
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_confirmed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    payment_rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_rejected_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    payment_rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (UniqueConstraint("retreat_id", "user_id", name="uq_retreat_registration"),)
+
+    retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="registrations")
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
+    payment_confirmed_by: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[payment_confirmed_by_user_id]
+    )
+    payment_rejected_by: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[payment_rejected_by_user_id]
+    )
+    cancelled_by: Mapped["User | None"] = relationship("User", foreign_keys=[cancelled_by_user_id])

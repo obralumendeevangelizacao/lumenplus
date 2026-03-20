@@ -108,6 +108,32 @@ class ApiClient {
   async delete<T>(url: string): Promise<T> {
     return this.request<T>('DELETE', url);
   }
+
+  get baseUrl(): string {
+    return API_BASE_URL;
+  }
+
+  /**
+   * Envia multipart/form-data (usado para upload de comprovantes).
+   */
+  async postForm<T>(url: string, formData: FormData): Promise<T> {
+    const token = await this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) await this.clearToken();
+      const error = await response.json().catch(() => ({}));
+      throw { response: { status: response.status, data: error } };
+    }
+    return response.json();
+  }
 }
 
 export const api = new ApiClient();
