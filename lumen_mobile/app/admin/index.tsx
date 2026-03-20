@@ -50,6 +50,18 @@ const adminSections: AdminSection[] = [
     ],
   },
   {
+    title: 'Eventos',
+    options: [
+      {
+        id: 'retreats',
+        title: 'Retiros',
+        description: 'Crie e gerencie retiros e inscrições',
+        icon: 'compass-outline',
+        route: '/admin/retreats',
+      },
+    ],
+  },
+  {
     title: 'Estrutura',
     options: [
       {

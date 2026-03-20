@@ -156,9 +156,11 @@ async def health():
 
 # Rotas — imports após setup do app (necessário para que o lifespan e middlewares
 # sejam registrados antes dos routers, comportamento esperado no FastAPI).  # noqa: E402
+from app.api.admin_retreat_routes import router as admin_retreat_router  # noqa: E402
 from app.api.inbox_routes import router as inbox_router  # noqa: E402
 from app.api.legal_routes import router as legal_router  # noqa: E402
 from app.api.profile_routes import router as profile_router  # noqa: E402
+from app.api.retreat_routes import router as retreat_router  # noqa: E402
 from app.api.routes.admin import router as admin_router  # noqa: E402
 from app.api.routes.auth import router as auth_router  # noqa: E402
 from app.api.routes.organization import router as org_router  # noqa: E402
@@ -168,6 +170,8 @@ app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(org_router)
 app.include_router(admin_router)
+app.include_router(admin_retreat_router)
+app.include_router(retreat_router)
 app.include_router(inbox_router)
 app.include_router(verify_router)
 app.include_router(legal_router)

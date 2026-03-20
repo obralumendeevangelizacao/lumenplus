@@ -218,12 +218,20 @@ export default function HomeScreen() {
           <Text style={styles.quickActionText}>Meu Perfil</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.quickActionCard}
           onPress={() => router.push('/(tabs)/invites')}
         >
           <Ionicons name="mail-outline" size={28} color={colors.primary} />
           <Text style={styles.quickActionText}>Inbox</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.quickActionCard}
+          onPress={() => router.push('/retreats' as any)}
+        >
+          <Ionicons name="compass-outline" size={28} color={colors.primary} />
+          <Text style={styles.quickActionText}>Retiros</Text>
         </TouchableOpacity>
       </View>
 

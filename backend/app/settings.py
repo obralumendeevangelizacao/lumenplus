@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     # =========================================================================
     firebase_project_id: str = Field(default="")
 
+    # Cloudinary (upload de comprovantes de retiro)
+    cloudinary_cloud_name: str = Field(default="")
+    cloudinary_api_key: str = Field(default="")
+    cloudinary_api_secret: str = Field(default="")
+
     # =========================================================================
     # FEATURE FLAGS
     # =========================================================================
