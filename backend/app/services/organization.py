@@ -321,7 +321,18 @@ def send_invite(
     # Verifica se é coordenador
     if not is_coordinator_of(db, invited_by_user_id, org_unit_id):
         raise OrgServiceError("permission_denied", "Apenas coordenadores podem enviar convites")
-    
+
+    # Convite para COORDINATOR exige ser DEV/ADMIN ou coordenador da entidade pai
+    if role == OrgRoleCode.COORDINATOR:
+        global_roles = get_user_global_roles(db, invited_by_user_id)
+        has_admin = any(r in ("DEV", "ADMIN") for r in global_roles)
+        if not has_admin:
+            if not org_unit.parent_id or not is_coordinator_of(db, invited_by_user_id, org_unit.parent_id):
+                raise OrgServiceError(
+                    "permission_denied",
+                    "Apenas administradores ou coordenadores da entidade superior podem convidar coordenadores",
+                )
+
     # Verifica se usuário existe
     invited_user = db.get(User, invited_user_id)
     if not invited_user:

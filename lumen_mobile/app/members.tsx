@@ -17,6 +17,7 @@ import {
   Alert,
   Modal,
   TextInput,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -282,7 +283,11 @@ export default function MembersScreen() {
       onRequestClose={() => setShowInvite(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <ScrollView
+          style={styles.modalContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Convidar Membro</Text>
             <TouchableOpacity onPress={() => setShowInvite(false)}>
@@ -339,14 +344,16 @@ export default function MembersScreen() {
                 Membro
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.roleOption, inviteRole === 'COORDINATOR' && styles.roleOptionActive]}
-              onPress={() => setInviteRole('COORDINATOR')}
-            >
-              <Text style={[styles.roleOptionText, inviteRole === 'COORDINATOR' && styles.roleOptionTextActive]}>
-                Coordenador
-              </Text>
-            </TouchableOpacity>
+            {!permissions?.is_coordinator && (
+              <TouchableOpacity
+                style={[styles.roleOption, inviteRole === 'COORDINATOR' && styles.roleOptionActive]}
+                onPress={() => setInviteRole('COORDINATOR')}
+              >
+                <Text style={[styles.roleOptionText, inviteRole === 'COORDINATOR' && styles.roleOptionTextActive]}>
+                  Coordenador
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <Text style={styles.label}>Mensagem (opcional)</Text>
@@ -359,7 +366,7 @@ export default function MembersScreen() {
             numberOfLines={3}
             placeholderTextColor={colors.gray}
           />
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );
