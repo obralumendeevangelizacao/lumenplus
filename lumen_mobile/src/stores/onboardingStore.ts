@@ -5,30 +5,31 @@
  */
 
 import { create } from 'zustand';
-import { Catalog, LatestLegal, Profile } from '@/types';
+import { Catalog, LatestLegal, Profile, ProfileUpdateRequest } from '@/types';
 import { profileService, legalService } from '@/services';
+import { parseApiError } from '@/utils/error';
 
 interface OnboardingState {
   // Data
   catalogs: Catalog[];
   legal: LatestLegal | null;
   profile: Profile | null;
-  
+
   // Loading states
   isLoadingCatalogs: boolean;
   isLoadingLegal: boolean;
   isLoadingProfile: boolean;
   isSaving: boolean;
-  
+
   // Error
   error: string | null;
-  
+
   // Actions
   loadCatalogs: () => Promise<void>;
   loadLegal: () => Promise<void>;
   loadProfile: () => Promise<void>;
   acceptTerms: (analyticsOptIn?: boolean) => Promise<void>;
-  saveProfile: (data: any) => Promise<void>;
+  saveProfile: (data: ProfileUpdateRequest) => Promise<void>;
   clearError: () => void;
 }
 
@@ -47,8 +48,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       set({ isLoadingCatalogs: true, error: null });
       const catalogs = await profileService.getCatalogs();
       set({ catalogs });
-    } catch (error: any) {
-      set({ error: error.response?.data?.detail?.message || 'Erro ao carregar catálogos' });
+    } catch (error: unknown) {
+      set({ error: parseApiError(error, 'Erro ao carregar catálogos') });
     } finally {
       set({ isLoadingCatalogs: false });
     }
@@ -59,8 +60,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       set({ isLoadingLegal: true, error: null });
       const legal = await legalService.getLatest();
       set({ legal });
-    } catch (error: any) {
-      set({ error: error.response?.data?.detail?.message || 'Erro ao carregar termos' });
+    } catch (error: unknown) {
+      set({ error: parseApiError(error, 'Erro ao carregar termos') });
     } finally {
       set({ isLoadingLegal: false });
     }
@@ -71,8 +72,8 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
       set({ isLoadingProfile: true, error: null });
       const profile = await profileService.getProfile();
       set({ profile });
-    } catch (error: any) {
-      set({ error: error.response?.data?.detail?.message || 'Erro ao carregar perfil' });
+    } catch (error: unknown) {
+      set({ error: parseApiError(error, 'Erro ao carregar perfil') });
     } finally {
       set({ isLoadingProfile: false });
     }
@@ -93,22 +94,21 @@ export const useOnboardingStore = create<OnboardingState>((set, get) => ({
         analytics_opt_in: analyticsOptIn,
         push_opt_in: true,
       });
-    } catch (error: any) {
-      set({ error: error.response?.data?.detail?.message || 'Erro ao aceitar termos' });
+    } catch (error: unknown) {
+      set({ error: parseApiError(error, 'Erro ao aceitar termos') });
       throw error;
     } finally {
       set({ isSaving: false });
     }
   },
 
-  saveProfile: async (data) => {
+  saveProfile: async (data: ProfileUpdateRequest) => {
     try {
       set({ isSaving: true, error: null });
       const profile = await profileService.updateProfile(data);
       set({ profile });
-    } catch (error: any) {
-      const message = error.response?.data?.detail?.message || 'Erro ao salvar perfil';
-      set({ error: message });
+    } catch (error: unknown) {
+      set({ error: parseApiError(error, 'Erro ao salvar perfil') });
       throw error;
     } finally {
       set({ isSaving: false });

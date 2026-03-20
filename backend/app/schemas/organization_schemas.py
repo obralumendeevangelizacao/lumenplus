@@ -13,8 +13,10 @@ from datetime import datetime
 # ORG UNIT
 # =============================================================================
 
+
 class CreateOrgUnitRequest(BaseModel):
     """Request para criar unidade organizacional."""
+
     name: str = Field(..., min_length=2, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
     visibility: Optional[str] = "PUBLIC"  # PUBLIC | RESTRICTED
@@ -24,6 +26,7 @@ class CreateOrgUnitRequest(BaseModel):
 
 class OrgUnitOut(BaseModel):
     """Unidade organizacional."""
+
     id: UUID
     type: str  # CONSELHO_GERAL, CONSELHO_EXECUTIVO, SETOR, MINISTERIO, GRUPO
     group_type: Optional[str] = None
@@ -41,6 +44,7 @@ class OrgUnitOut(BaseModel):
 
 class OrgUnitWithChildren(OrgUnitOut):
     """Unidade com filhos (para árvore)."""
+
     children: List["OrgUnitWithChildren"] = []
     member_count: int = 0
 
@@ -51,6 +55,7 @@ OrgUnitWithChildren.model_rebuild()
 
 class OrgTreeResponse(BaseModel):
     """Resposta da árvore organizacional."""
+
     root: Optional[OrgUnitWithChildren] = None
 
 
@@ -58,8 +63,10 @@ class OrgTreeResponse(BaseModel):
 # INVITES
 # =============================================================================
 
+
 class SendInviteRequest(BaseModel):
     """Request para enviar convite."""
+
     user_id: UUID
     role: Optional[str] = "MEMBER"  # COORDINATOR | MEMBER
     message: Optional[str] = Field(None, max_length=500)
@@ -67,6 +74,7 @@ class SendInviteRequest(BaseModel):
 
 class InviteResponse(BaseModel):
     """Resposta de ação de convite."""
+
     message: str
     invite_id: UUID
     status: str
@@ -74,6 +82,7 @@ class InviteResponse(BaseModel):
 
 class InviteDetailOut(BaseModel):
     """Detalhes do convite."""
+
     id: UUID
     org_unit_id: UUID
     org_unit_name: str
@@ -96,6 +105,7 @@ class InviteDetailOut(BaseModel):
 
 class PendingInvitesResponse(BaseModel):
     """Lista de convites pendentes."""
+
     org_unit_id: UUID
     invites: List[InviteDetailOut] = []
 
@@ -104,8 +114,10 @@ class PendingInvitesResponse(BaseModel):
 # MEMBERS
 # =============================================================================
 
+
 class MemberOut(BaseModel):
     """Membro de uma unidade."""
+
     user_id: UUID
     user_name: str
     user_email: Optional[str] = None
@@ -119,6 +131,7 @@ class MemberOut(BaseModel):
 
 class MembersListResponse(BaseModel):
     """Lista de membros."""
+
     org_unit_id: UUID
     org_unit_name: str
     members: List[MemberOut] = []

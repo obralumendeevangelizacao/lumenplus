@@ -18,7 +18,14 @@ router = APIRouter(prefix="/dev", tags=["Development"])
 def get_phase1_models():
     """Get Phase 1 models if they exist."""
     try:
-        from app.db.models import GlobalRole, UserGlobalRole, ProfileCatalog, ProfileCatalogItem, LegalDocument
+        from app.db.models import (
+            GlobalRole,
+            UserGlobalRole,
+            ProfileCatalog,
+            ProfileCatalogItem,
+            LegalDocument,
+        )
+
         return {
             "GlobalRole": GlobalRole,
             "UserGlobalRole": UserGlobalRole,
@@ -161,11 +168,36 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
     # =========================================================================
     existing_slugs = {u.slug for u in db.query(OrgUnit).all()}
     sample_data = [
-        {"type": OrgUnitType.SECTOR, "name": "Setor de Formação", "slug": "formacao", "parent": None},
-        {"type": OrgUnitType.SECTOR, "name": "Setor de Liturgia", "slug": "liturgia", "parent": None},
-        {"type": OrgUnitType.MINISTRY, "name": "Ministério de Catequese", "slug": "catequese", "parent": "formacao"},
-        {"type": OrgUnitType.MINISTRY, "name": "Ministério de Casais", "slug": "casais", "parent": "formacao"},
-        {"type": OrgUnitType.MINISTRY, "name": "Ministério de Música", "slug": "musica", "parent": "liturgia"},
+        {
+            "type": OrgUnitType.SECTOR,
+            "name": "Setor de Formação",
+            "slug": "formacao",
+            "parent": None,
+        },
+        {
+            "type": OrgUnitType.SECTOR,
+            "name": "Setor de Liturgia",
+            "slug": "liturgia",
+            "parent": None,
+        },
+        {
+            "type": OrgUnitType.MINISTRY,
+            "name": "Ministério de Catequese",
+            "slug": "catequese",
+            "parent": "formacao",
+        },
+        {
+            "type": OrgUnitType.MINISTRY,
+            "name": "Ministério de Casais",
+            "slug": "casais",
+            "parent": "formacao",
+        },
+        {
+            "type": OrgUnitType.MINISTRY,
+            "name": "Ministério de Música",
+            "slug": "musica",
+            "parent": "liturgia",
+        },
         {"type": OrgUnitType.GROUP, "name": "Grupo de Jovens", "slug": "jovens", "parent": None},
         {"type": OrgUnitType.GROUP, "name": "Grupo de Oração", "slug": "oracao", "parent": None},
     ]
@@ -194,7 +226,7 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
     # PHASE 1: Global Roles, Catalogs, Legal Docs
     # =========================================================================
     models = get_phase1_models()
-    
+
     if models:
         GlobalRole = models["GlobalRole"]
         ProfileCatalog = models["ProfileCatalog"]
@@ -222,7 +254,7 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
                 "name": "Estado de Vida",
                 "items": [
                     "Leigo",
-                    "Leigo Consagrado", 
+                    "Leigo Consagrado",
                     "Noviça",
                     "Seminarista",
                     "Religioso",
@@ -259,11 +291,11 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
         }
 
         existing_catalogs = {c.code for c in db.query(ProfileCatalog).all()}
-        
+
         for code, data in catalogs_data.items():
             if code in existing_catalogs:
                 continue
-            
+
             catalog = ProfileCatalog(code=code, name=data["name"])
             db.add(catalog)
             db.flush()
@@ -285,7 +317,7 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
                     .replace("Ê", "E")
                     .replace("Ô", "O")
                 )[:50]
-                
+
                 item = ProfileCatalogItem(
                     catalog_id=catalog.id,
                     code=item_code,
@@ -295,7 +327,7 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
                 )
                 db.add(item)
                 catalog_items_created += 1
-        
+
         db.flush()
 
         # Legal Documents
@@ -406,7 +438,7 @@ async def assign_global_role(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={"error": "not_implemented", "message": "Phase 1 models not available"},
         )
-    
+
     GlobalRole = models["GlobalRole"]
     UserGlobalRole = models["UserGlobalRole"]
 

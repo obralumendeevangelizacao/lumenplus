@@ -9,21 +9,38 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 
 from app.api.deps import CurrentUser, DBSession
-from app.db.models import User, OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
+from app.db.models import OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
 from sqlalchemy import select as sa_select
 
 from app.db.models import MembershipStatus, OrgMembership
 from app.schemas.organization import (
-    CreateOrgUnitRequest, InviteDetailOut, InviteResponse, MemberOut,
-    MembersListResponse, OrgTreeResponse, OrgUnitOut, OrgUnitWithChildren,
-    PendingInvitesResponse, SendInviteRequest, UpdateOrgUnitRequest,
+    CreateOrgUnitRequest,
+    InviteDetailOut,
+    InviteResponse,
+    MemberOut,
+    MembersListResponse,
+    OrgTreeResponse,
+    OrgUnitOut,
+    OrgUnitWithChildren,
+    PendingInvitesResponse,
+    SendInviteRequest,
+    UpdateOrgUnitRequest,
 )
 from app.services.organization import (
-    OrgServiceError, create_org_unit, get_org_tree, get_org_unit_members,
-    get_org_unit_pending_invites, get_user_global_roles, get_user_pending_invites,
-    get_user_permissions, is_coordinator_of, remove_member,
-    respond_to_invite, search_users_for_invite, send_invite,
-    update_member_role, update_org_unit,
+    OrgServiceError,
+    create_org_unit,
+    get_org_tree,
+    get_org_unit_members,
+    get_org_unit_pending_invites,
+    get_user_global_roles,
+    get_user_pending_invites,
+    get_user_permissions,
+    remove_member,
+    respond_to_invite,
+    search_users_for_invite,
+    send_invite,
+    update_member_role,
+    update_org_unit,
 )
 
 router = APIRouter(prefix="/org", tags=["organization"])
@@ -51,6 +68,7 @@ def handle_org_error(e: OrgServiceError):
 # ORG UNITS
 # =============================================================================
 
+
 @router.post("/root-unit", response_model=OrgUnitOut, status_code=201)
 async def create_root_unit(
     data: CreateOrgUnitRequest,
@@ -65,17 +83,23 @@ async def create_root_unit(
     if not any(r in global_roles for r in ["DEV", "ADMIN"]):
         raise HTTPException(
             status_code=403,
-            detail={"error": "permission_denied", "message": "Requer papel DEV ou ADMIN para criar a unidade raiz"},
+            detail={
+                "error": "permission_denied",
+                "message": "Requer papel DEV ou ADMIN para criar a unidade raiz",
+            },
         )
 
     existing_root = db.execute(
-        sa_select(OrgUnit).where(OrgUnit.parent_id == None, OrgUnit.is_active == True)  # noqa: E711
+        sa_select(OrgUnit).where(OrgUnit.parent_id == None, OrgUnit.is_active)  # noqa: E711
     ).scalar_one_or_none()
 
     if existing_root:
         raise HTTPException(
             status_code=409,
-            detail={"error": "root_exists", "message": f"Já existe uma unidade raiz: '{existing_root.name}'"},
+            detail={
+                "error": "root_exists",
+                "message": f"Já existe uma unidade raiz: '{existing_root.name}'",
+            },
         )
 
     try:
@@ -109,6 +133,33 @@ async def create_root_unit(
         handle_org_error(e)
 
 
+@router.get("/ministries")
+async def list_ministries(
+    user: CurrentUser,
+    db: DBSession,
+):
+    """
+    Lista todos os ministérios ativos (tipo MINISTERIO).
+
+    Usado pelo app mobile no formulário de perfil para o campo
+    "Interesse em Ministério". Retorna apenas id, name e slug.
+    """
+    ministries = (
+        db.execute(
+            sa_select(OrgUnit)
+            .where(
+                OrgUnit.type == OrgUnitType.MINISTERIO,
+                OrgUnit.is_active,  # noqa: E711
+            )
+            .order_by(OrgUnit.name)
+        )
+        .scalars()
+        .all()
+    )
+
+    return {"ministries": [{"id": str(m.id), "name": m.name, "slug": m.slug} for m in ministries]}
+
+
 @router.get("/tree", response_model=OrgTreeResponse)
 async def get_organization_tree(
     user: CurrentUser,
@@ -116,10 +167,10 @@ async def get_organization_tree(
 ):
     """Retorna árvore organizacional."""
     root = get_org_tree(db, user.id)
-    
+
     if not root:
         return OrgTreeResponse(root=None)
-    
+
     def build_tree(unit: OrgUnit, depth: int = 0) -> OrgUnitWithChildren:
         children = []
         if depth < 5:  # Limita profundidade
@@ -127,7 +178,7 @@ async def get_organization_tree(
                 if child.is_active:
                     # TODO: Filtrar por visibilidade
                     children.append(build_tree(child, depth + 1))
-        
+
         return OrgUnitWithChildren(
             id=unit.id,
             type=unit.type.value,
@@ -142,7 +193,7 @@ async def get_organization_tree(
             children=children,
             member_count=len([m for m in unit.memberships if m.status.value == "ACTIVE"]),
         )
-    
+
     return OrgTreeResponse(root=build_tree(root))
 
 
@@ -157,27 +208,32 @@ async def create_child_unit(
     # Determina tipo baseado no parent
     parent = db.get(OrgUnit, parent_id)
     if not parent:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unidade pai não encontrada"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Unidade pai não encontrada"}
+        )
+
     type_mapping = {
         "CONSELHO_GERAL": OrgUnitType.CONSELHO_EXECUTIVO,
         "CONSELHO_EXECUTIVO": OrgUnitType.SETOR,
         "SETOR": OrgUnitType.MINISTERIO if not data.group_type else OrgUnitType.GRUPO,
         "MINISTERIO": OrgUnitType.GRUPO,
     }
-    
+
     child_type = type_mapping.get(parent.type.value)
     if not child_type:
-        raise HTTPException(status_code=400, detail={"error": "invalid_parent", "message": "Esta unidade não pode ter filhos"})
-    
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_parent", "message": "Esta unidade não pode ter filhos"},
+        )
+
     # Se group_type foi fornecido, é um GRUPO
     if data.group_type:
         child_type = OrgUnitType.GRUPO
-    
+
     try:
         group_type = GroupType(data.group_type) if data.group_type else None
         visibility = Visibility(data.visibility) if data.visibility else Visibility.PUBLIC
-        
+
         unit = create_org_unit(
             db=db,
             user_id=user.id,
@@ -189,7 +245,7 @@ async def create_child_unit(
             group_type=group_type,
             coordinator_user_ids=data.coordinator_user_ids,
         )
-        
+
         return OrgUnitOut(
             id=unit.id,
             type=unit.type.value,
@@ -215,8 +271,10 @@ async def get_org_unit(
     """Retorna detalhes de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
     if not unit:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"}
+        )
+
     return OrgUnitOut(
         id=unit.id,
         type=unit.type.value,
@@ -235,6 +293,7 @@ async def get_org_unit(
 # MEMBERS
 # =============================================================================
 
+
 @router.get("/units/{org_unit_id}/members", response_model=MembersListResponse)
 async def list_members(
     org_unit_id: UUID,
@@ -244,26 +303,30 @@ async def list_members(
     """Lista membros de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
     if not unit:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"}
+        )
+
     try:
         memberships = get_org_unit_members(db, org_unit_id, user.id)
-        
+
         members = []
         for m in memberships:
             member_user = m.user
             profile = member_user.profile
             email = member_user.identities[0].email if member_user.identities else None
-            
-            members.append(MemberOut(
-                user_id=m.user_id,
-                user_name=profile.full_name if profile else "Usuário",
-                user_email=email,
-                role=m.role.value,
-                status=m.status.value,
-                joined_at=m.joined_at,
-            ))
-        
+
+            members.append(
+                MemberOut(
+                    user_id=m.user_id,
+                    user_name=profile.full_name if profile else "Usuário",
+                    user_email=email,
+                    role=m.role.value,
+                    status=m.status.value,
+                    joined_at=m.joined_at,
+                )
+            )
+
         return MembersListResponse(
             org_unit_id=org_unit_id,
             org_unit_name=unit.name,
@@ -278,6 +341,7 @@ async def list_members(
 # INVITES
 # =============================================================================
 
+
 @router.post("/units/{org_unit_id}/invites", response_model=InviteResponse)
 async def send_member_invite(
     org_unit_id: UUID,
@@ -288,7 +352,7 @@ async def send_member_invite(
     """Envia convite para participar da unidade."""
     try:
         role = OrgRoleCode(data.role) if data.role else OrgRoleCode.MEMBER
-        
+
         invite = send_invite(
             db=db,
             org_unit_id=org_unit_id,
@@ -297,7 +361,7 @@ async def send_member_invite(
             role=role,
             message=data.message,
         )
-        
+
         return InviteResponse(
             message="Convite enviado com sucesso",
             invite_id=invite.id,
@@ -316,30 +380,38 @@ async def list_pending_invites(
     """Lista convites pendentes da unidade (só coordenador)."""
     try:
         invites = get_org_unit_pending_invites(db, org_unit_id, user.id)
-        
+
         invite_list = []
         for inv in invites:
             invited_user = inv.invited_user
             invited_by = inv.invited_by_user
-            
-            invite_list.append(InviteDetailOut(
-                id=inv.id,
-                org_unit_id=inv.org_unit_id,
-                org_unit_name=inv.org_unit.name,
-                org_unit_type=inv.org_unit.type.value,
-                invited_user_id=inv.invited_user_id,
-                invited_user_name=invited_user.profile.full_name if invited_user.profile else "Usuário",
-                invited_user_email=invited_user.identities[0].email if invited_user.identities else None,
-                invited_by_user_id=inv.invited_by_user_id,
-                invited_by_name=invited_by.profile.full_name if invited_by.profile else "Usuário",
-                role=inv.role.value,
-                status=inv.status.value,
-                message=inv.message,
-                created_at=inv.created_at,
-                expires_at=inv.expires_at,
-                responded_at=inv.responded_at,
-            ))
-        
+
+            invite_list.append(
+                InviteDetailOut(
+                    id=inv.id,
+                    org_unit_id=inv.org_unit_id,
+                    org_unit_name=inv.org_unit.name,
+                    org_unit_type=inv.org_unit.type.value,
+                    invited_user_id=inv.invited_user_id,
+                    invited_user_name=invited_user.profile.full_name
+                    if invited_user.profile
+                    else "Usuário",
+                    invited_user_email=invited_user.identities[0].email
+                    if invited_user.identities
+                    else None,
+                    invited_by_user_id=inv.invited_by_user_id,
+                    invited_by_name=invited_by.profile.full_name
+                    if invited_by.profile
+                    else "Usuário",
+                    role=inv.role.value,
+                    status=inv.status.value,
+                    message=inv.message,
+                    created_at=inv.created_at,
+                    expires_at=inv.expires_at,
+                    responded_at=inv.responded_at,
+                )
+            )
+
         return PendingInvitesResponse(
             org_unit_id=org_unit_id,
             invites=invite_list,
@@ -388,6 +460,7 @@ async def reject_invite(
 # MY INVITES (convites do usuário logado)
 # =============================================================================
 
+
 @router.get("/my/invites", response_model=list[InviteDetailOut])
 async def get_my_pending_invites(
     user: CurrentUser,
@@ -395,32 +468,34 @@ async def get_my_pending_invites(
 ):
     """Lista convites pendentes do usuário logado."""
     invites = get_user_pending_invites(db, user.id)
-    
+
     result = []
     for inv in invites:
         invited_by = inv.invited_by_user
         invited_by_name = "Desconhecido"
         if invited_by and invited_by.profile:
             invited_by_name = invited_by.profile.full_name or "Usuário"
-        
-        result.append(InviteDetailOut(
-            id=inv.id,
-            org_unit_id=inv.org_unit_id,
-            org_unit_name=inv.org_unit.name,
-            org_unit_type=inv.org_unit.type.value,
-            invited_user_id=inv.invited_user_id,
-            invited_user_name=user.profile.full_name if user.profile else "Você",
-            invited_user_email=user.identities[0].email if user.identities else None,
-            invited_by_user_id=inv.invited_by_user_id,
-            invited_by_name=invited_by_name,
-            role=inv.role.value,
-            status=inv.status.value,
-            message=inv.message,
-            created_at=inv.created_at,
-            expires_at=inv.expires_at,
-            responded_at=inv.responded_at,
-        ))
-    
+
+        result.append(
+            InviteDetailOut(
+                id=inv.id,
+                org_unit_id=inv.org_unit_id,
+                org_unit_name=inv.org_unit.name,
+                org_unit_type=inv.org_unit.type.value,
+                invited_user_id=inv.invited_user_id,
+                invited_user_name=user.profile.full_name if user.profile else "Você",
+                invited_user_email=user.identities[0].email if user.identities else None,
+                invited_by_user_id=inv.invited_by_user_id,
+                invited_by_name=invited_by_name,
+                role=inv.role.value,
+                status=inv.status.value,
+                message=inv.message,
+                created_at=inv.created_at,
+                expires_at=inv.expires_at,
+                responded_at=inv.responded_at,
+            )
+        )
+
     return result
 
 
@@ -430,25 +505,30 @@ async def get_my_memberships(
     db: DBSession,
 ):
     """Lista memberships ativos do usuário."""
-    memberships = db.execute(
-        sa_select(OrgMembership)
-        .where(
-            OrgMembership.user_id == user.id,
-            OrgMembership.status == MembershipStatus.ACTIVE,
+    memberships = (
+        db.execute(
+            sa_select(OrgMembership).where(
+                OrgMembership.user_id == user.id,
+                OrgMembership.status == MembershipStatus.ACTIVE,
+            )
         )
-    ).scalars().all()
-    
+        .scalars()
+        .all()
+    )
+
     result = []
     for m in memberships:
-        result.append({
-            "id": str(m.id),
-            "org_unit_id": str(m.org_unit_id),
-            "org_unit_name": m.org_unit.name,
-            "org_unit_type": m.org_unit.type.value,
-            "role": m.role.value,
-            "status": m.status.value,   # era ausente — mobile Membership.status ficava undefined
-            "joined_at": m.joined_at.isoformat(),
-        })
+        result.append(
+            {
+                "id": str(m.id),
+                "org_unit_id": str(m.org_unit_id),
+                "org_unit_name": m.org_unit.name,
+                "org_unit_type": m.org_unit.type.value,
+                "role": m.role.value,
+                "status": m.status.value,  # era ausente — mobile Membership.status ficava undefined
+                "joined_at": m.joined_at.isoformat(),
+            }
+        )
 
     return result
 
@@ -456,6 +536,7 @@ async def get_my_memberships(
 # =============================================================================
 # MEMBER MANAGEMENT (gerenciamento de membros)
 # =============================================================================
+
 
 @router.get("/units/{org_unit_id}/search-users")
 async def search_users_to_invite(
@@ -467,19 +548,21 @@ async def search_users_to_invite(
     """Busca usuários para convidar (exclui membros e convites pendentes)."""
     if len(q) < 2:
         return []
-    
+
     try:
         users = search_users_for_invite(db, org_unit_id, user.id, q)
-        
+
         result = []
         for u in users:
-            result.append({
-                "id": str(u.id),
-                "name": u.profile.full_name if u.profile else "Usuário",
-                "email": u.identities[0].email if u.identities else None,
-                "photo_url": u.profile.photo_url if u.profile else None,
-            })
-        
+            result.append(
+                {
+                    "id": str(u.id),
+                    "name": u.profile.full_name if u.profile else "Usuário",
+                    "email": u.identities[0].email if u.identities else None,
+                    "photo_url": u.profile.photo_url if u.profile else None,
+                }
+            )
+
         return result
     except OrgServiceError as e:
         handle_org_error(e)
@@ -497,8 +580,10 @@ async def update_member_role_endpoint(
     try:
         new_role = OrgRoleCode(role)
     except ValueError:
-        raise HTTPException(status_code=400, detail={"error": "invalid_role", "message": "Papel inválido"})
-    
+        raise HTTPException(
+            status_code=400, detail={"error": "invalid_role", "message": "Papel inválido"}
+        )
+
     try:
         membership = update_member_role(db, org_unit_id, member_user_id, user.id, new_role)
         return {
@@ -552,6 +637,7 @@ async def get_unit_permissions(
 # =============================================================================
 # EDIÇÃO DE UNIDADES
 # =============================================================================
+
 
 @router.patch("/units/{unit_id}", response_model=OrgUnitOut)
 async def update_org_unit_endpoint(

@@ -7,7 +7,9 @@ from cachetools import TTLCache
 from jose import jwt
 from jose.exceptions import JWTError
 
-FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+FIREBASE_CERTS_URL = (
+    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+)
 
 _certs_cache: TTLCache[str, dict[str, str]] = TTLCache(maxsize=1, ttl=3600)
 logger = logging.getLogger(__name__)
@@ -88,9 +90,7 @@ class FirebaseAuth:
             uid = unverified.get("sub") or unverified.get("user_id")
             if not uid:
                 raise ValueError("JWT sem campo 'sub'/'user_id'")
-            logger.debug(
-                "FirebaseAuth DEV: aceitando JWT sem verificacao de assinatura"
-            )
+            logger.debug("FirebaseAuth DEV: aceitando JWT sem verificacao de assinatura")
             return TokenPayload(
                 uid=uid,
                 email=unverified.get("email"),

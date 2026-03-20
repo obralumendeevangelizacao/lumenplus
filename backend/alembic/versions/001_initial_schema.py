@@ -20,10 +20,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create enum types FIRST, before any tables
-    org_unit_type = postgresql.ENUM("SECTOR", "MINISTRY", "GROUP", name="org_unit_type", create_type=False)
+    org_unit_type = postgresql.ENUM(
+        "SECTOR", "MINISTRY", "GROUP", name="org_unit_type", create_type=False
+    )
     org_unit_type.create(op.get_bind(), checkfirst=True)
 
-    membership_status = postgresql.ENUM("PENDING", "ACTIVE", "REJECTED", "REMOVED", name="membership_status", create_type=False)
+    membership_status = postgresql.ENUM(
+        "PENDING", "ACTIVE", "REJECTED", "REMOVED", name="membership_status", create_type=False
+    )
     membership_status.create(op.get_bind(), checkfirst=True)
 
     # users table
@@ -31,8 +35,12 @@ def upgrade() -> None:
         "users",
         sa.Column("id", sa.UUID(), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_users_is_active", "users", ["is_active"])
@@ -45,7 +53,9 @@ def upgrade() -> None:
         sa.Column("provider", sa.Text(), nullable=False),
         sa.Column("provider_uid", sa.Text(), nullable=False),
         sa.Column("email", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("provider", "provider_uid", name="uq_identity_provider_uid"),
@@ -64,7 +74,9 @@ def upgrade() -> None:
         sa.Column("ip", sa.Text(), nullable=True),
         sa.Column("user_agent", sa.Text(), nullable=True),
         sa.Column("extra_data", postgresql.JSONB(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(["actor_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -76,14 +88,29 @@ def upgrade() -> None:
     op.create_table(
         "org_units",
         sa.Column("id", sa.UUID(), nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("type", sa.Enum("SECTOR", "MINISTRY", "GROUP", name="org_unit_type", create_constraint=False, native_enum=False), nullable=False),
+        sa.Column(
+            "type",
+            sa.Enum(
+                "SECTOR",
+                "MINISTRY",
+                "GROUP",
+                name="org_unit_type",
+                create_constraint=False,
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
         sa.Column("name", sa.Text(), nullable=False),
         sa.Column("slug", sa.Text(), nullable=False),
         sa.Column("parent_id", sa.UUID(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("created_by_user_id", sa.UUID(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(["parent_id"], ["org_units.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["created_by_user_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
@@ -110,11 +137,28 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), nullable=False),
         sa.Column("org_unit_id", sa.UUID(), nullable=False),
         sa.Column("org_role_id", sa.UUID(), nullable=False),
-        sa.Column("status", sa.Enum("PENDING", "ACTIVE", "REJECTED", "REMOVED", name="membership_status", create_constraint=False, native_enum=False), nullable=False, server_default="PENDING"),
+        sa.Column(
+            "status",
+            sa.Enum(
+                "PENDING",
+                "ACTIVE",
+                "REJECTED",
+                "REMOVED",
+                name="membership_status",
+                create_constraint=False,
+                native_enum=False,
+            ),
+            nullable=False,
+            server_default="PENDING",
+        ),
         sa.Column("approved_by_user_id", sa.UUID(), nullable=True),
         sa.Column("approved_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["org_unit_id"], ["org_units.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["org_role_id"], ["org_roles.id"], ondelete="RESTRICT"),

@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DBSession
-from app.db.models import MembershipStatus, OrgMembership, OrgUnitType
+from app.db.models import MembershipStatus, OrgMembership
 from app.org.service import expand_org_units_for_user, get_org_tree
 from app.schemas.responses import ErrorResponse
 

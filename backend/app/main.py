@@ -61,7 +61,9 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    logger.info("application_startup", environment=settings.environment, version=settings.app_version)
+    logger.info(
+        "application_startup", environment=settings.environment, version=settings.app_version
+    )
 
     # Valida configurações em produção
     errors = settings.validate_production_settings()
@@ -144,7 +146,7 @@ async def add_request_id(request: Request, call_next):
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(
         "unhandled_exception",
-        error_type=type(exc).__name__,   # apenas o tipo, nunca str(exc)
+        error_type=type(exc).__name__,  # apenas o tipo, nunca str(exc)
         path=request.url.path,
         method=request.method,
     )
@@ -165,6 +167,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 @app.get("/health")
 async def health():
     from datetime import datetime, timezone
+
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -172,19 +175,24 @@ async def health():
     }
 
 
-# Rotas
-from app.api.routes.auth import router as auth_router
-from app.api.profile_routes import router as profile_router   # routes/profile (quebrado) substituido por profile_routes
-from app.api.routes.organization import router as org_router
-from app.api.routes.admin import router as admin_router
-from app.api.inbox_routes import router as inbox_router
-from app.api.verification_routes import router as verify_router  # verificacao de telefone via body
-from app.api.legal_routes import router as legal_router          # /legal/latest e /legal/accept (era orphan — não registrado)
+# Rotas — imports após setup do app (necessário para que o lifespan e middlewares
+# sejam registrados antes dos routers, comportamento esperado no FastAPI).  # noqa: E402
+from app.api.admin_retreat_routes import router as admin_retreat_router  # noqa: E402
+from app.api.inbox_routes import router as inbox_router  # noqa: E402
+from app.api.legal_routes import router as legal_router  # noqa: E402
+from app.api.profile_routes import router as profile_router  # noqa: E402
+from app.api.retreat_routes import router as retreat_router  # noqa: E402
+from app.api.routes.admin import router as admin_router  # noqa: E402
+from app.api.routes.auth import router as auth_router  # noqa: E402
+from app.api.routes.organization import router as org_router  # noqa: E402
+from app.api.verification_routes import router as verify_router  # noqa: E402
 
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(org_router)
 app.include_router(admin_router)
+app.include_router(admin_retreat_router)
+app.include_router(retreat_router)
 app.include_router(inbox_router)
 app.include_router(verify_router)
 app.include_router(legal_router)
@@ -192,6 +200,7 @@ app.include_router(legal_router)
 # Dev endpoints
 if settings.enable_dev_endpoints:
     from app.api.routes.dev import router as dev_router
+
     app.include_router(dev_router)
     logger.warning("dev_endpoints_enabled", message="Endpoints /dev/* estão habilitados!")
 

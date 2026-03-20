@@ -46,6 +46,7 @@ def require_admin_or_analista(db, user_id):
 # USERS — listagem administrativa
 # =============================================================================
 
+
 @router.get("/users")
 async def list_users(
     current_user: CurrentUser,
@@ -73,9 +74,7 @@ async def list_users(
             UserIdentity.user_id == User.id,
             UserIdentity.email.ilike(term),
         )
-        return stmt.where(
-            or_(UserProfile.full_name.ilike(term), email_match)
-        )
+        return stmt.where(or_(UserProfile.full_name.ilike(term), email_match))
 
     base = (
         select(User)
@@ -106,15 +105,17 @@ async def list_users(
         email = u.identities[0].email if u.identities else None
         user_roles = get_user_global_roles(db, u.id)
 
-        result.append({
-            "id": str(u.id),
-            "name": profile.full_name if profile else None,
-            "email": email,
-            "photo_url": profile.photo_url if profile else None,
-            "profile_status": profile.status if profile else "INCOMPLETE",
-            "global_roles": user_roles,
-            "created_at": u.created_at.isoformat(),
-        })
+        result.append(
+            {
+                "id": str(u.id),
+                "name": profile.full_name if profile else None,
+                "email": email,
+                "photo_url": profile.photo_url if profile else None,
+                "profile_status": profile.status if profile else "INCOMPLETE",
+                "global_roles": user_roles,
+                "created_at": u.created_at.isoformat(),
+            }
+        )
 
     return {"users": result, "total": total, "limit": limit, "offset": offset}
 
@@ -122,6 +123,7 @@ async def list_users(
 # =============================================================================
 # USERS — edição administrativa
 # =============================================================================
+
 
 class UpdateUserRequest(BaseModel):
     full_name: str | None = None
@@ -164,9 +166,7 @@ async def update_user(
     # Atualiza roles globais (substitui completamente)
     if data.global_roles is not None:
         # Remove todas as roles atuais
-        db.execute(
-            delete(UserGlobalRole).where(UserGlobalRole.user_id == user_id)
-        )
+        db.execute(delete(UserGlobalRole).where(UserGlobalRole.user_id == user_id))
         # Insere as novas
         allowed_roles = {"DEV", "ADMIN", "SECRETARY", "AVISOS"}
         for role_code in data.global_roles:
@@ -201,6 +201,7 @@ async def update_user(
 # USERS — concessão/revogação do cargo AVISOS
 # =============================================================================
 
+
 class ToggleAvisosRequest(BaseModel):
     grant: bool  # True = conceder, False = revogar
 
@@ -221,7 +222,10 @@ async def toggle_avisos_role(
         if not is_conselho_geral_coordinator(db, current_user.id):
             raise HTTPException(
                 status_code=403,
-                detail={"error": "forbidden", "message": "Sem permissão para gerenciar o cargo Avisos"},
+                detail={
+                    "error": "forbidden",
+                    "message": "Sem permissão para gerenciar o cargo Avisos",
+                },
             )
 
     target = db.get(User, user_id)
@@ -237,7 +241,10 @@ async def toggle_avisos_role(
     if not avisos_role:
         raise HTTPException(
             status_code=500,
-            detail={"error": "config_error", "message": "Cargo AVISOS não configurado. Execute o seed novamente."},
+            detail={
+                "error": "config_error",
+                "message": "Cargo AVISOS não configurado. Execute o seed novamente.",
+            },
         )
 
     existing = db.execute(

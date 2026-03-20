@@ -5,7 +5,7 @@ Revises: 002_phase1_cadastro
 Create Date: 2025-02-01
 
 Corrige os catálogos para os valores corretos:
-- Estado de Vida: Leigo, Leigo Consagrado, Noviça, Seminarista, Religioso, 
+- Estado de Vida: Leigo, Leigo Consagrado, Noviça, Seminarista, Religioso,
   Diácono Permanente, Diácono, Sacerdote Religioso, Sacerdote Diocesano, Bispo
 - Estado Civil: Solteiro, Noivo, Casado, Divorciado, Viúvo, União Estável
 - Realidade Vocacional: Membro do Acolhida, Membro do Aprofundamento, Vocacional,
@@ -37,45 +37,55 @@ def upgrade() -> None:
     # =========================================================================
     # 1. ADICIONAR COLUNAS FALTANTES NO USER_PROFILES
     # =========================================================================
-    
+
     # Foto do usuário
     op.add_column("user_profiles", sa.Column("photo_url", sa.Text(), nullable=True))
-    
+
     # Ano de consagração (se Consagrado Filho da Luz)
     op.add_column("user_profiles", sa.Column("consecration_year", sa.Integer(), nullable=True))
-    
+
     # Acompanhamento Vocacional
-    op.add_column("user_profiles", sa.Column("has_vocational_accompaniment", sa.Boolean(), nullable=True))
-    op.add_column("user_profiles", sa.Column("vocational_accompanist_user_id", sa.UUID(), nullable=True))
-    op.add_column("user_profiles", sa.Column("vocational_accompanist_name", sa.Text(), nullable=True))
-    
+    op.add_column(
+        "user_profiles", sa.Column("has_vocational_accompaniment", sa.Boolean(), nullable=True)
+    )
+    op.add_column(
+        "user_profiles", sa.Column("vocational_accompanist_user_id", sa.UUID(), nullable=True)
+    )
+    op.add_column(
+        "user_profiles", sa.Column("vocational_accompanist_name", sa.Text(), nullable=True)
+    )
+
     # Interesse em Ministério
     op.add_column("user_profiles", sa.Column("interested_in_ministry", sa.Boolean(), nullable=True))
     op.add_column("user_profiles", sa.Column("interested_ministry_id", sa.UUID(), nullable=True))
     op.add_column("user_profiles", sa.Column("ministry_interest_notes", sa.Text(), nullable=True))
-    
+
     # Foreign keys
     op.create_foreign_key(
         "fk_profile_vocational_accompanist",
-        "user_profiles", "users",
-        ["vocational_accompanist_user_id"], ["id"],
-        ondelete="SET NULL"
+        "user_profiles",
+        "users",
+        ["vocational_accompanist_user_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
     op.create_foreign_key(
         "fk_profile_interested_ministry",
-        "user_profiles", "org_units",
-        ["interested_ministry_id"], ["id"],
-        ondelete="SET NULL"
+        "user_profiles",
+        "org_units",
+        ["interested_ministry_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
-    
+
     # =========================================================================
     # 2. POPULAR CATÁLOGOS COM VALORES CORRETOS
     # =========================================================================
-    
+
     # Primeiro, limpar os catálogos existentes (se houver)
     op.execute("DELETE FROM profile_catalog_items")
     op.execute("DELETE FROM profile_catalogs")
-    
+
     # Inserir catálogos
     op.execute("""
         INSERT INTO profile_catalogs (id, code, name) VALUES
@@ -83,7 +93,7 @@ def upgrade() -> None:
         (gen_random_uuid(), 'MARITAL_STATUS', 'Estado Civil'),
         (gen_random_uuid(), 'VOCATIONAL_REALITY', 'Realidade Vocacional')
     """)
-    
+
     # -------------------------------------------------------------------------
     # ESTADO DE VIDA
     # -------------------------------------------------------------------------
@@ -108,7 +118,7 @@ def upgrade() -> None:
             ('BISPO', 'Bispo', 10)
         ) AS item(code, label, sort_order)
     """)
-    
+
     # -------------------------------------------------------------------------
     # ESTADO CIVIL
     # -------------------------------------------------------------------------
@@ -129,7 +139,7 @@ def upgrade() -> None:
             ('UNIAO_ESTAVEL', 'União Estável', 6)
         ) AS item(code, label, sort_order)
     """)
-    
+
     # -------------------------------------------------------------------------
     # REALIDADE VOCACIONAL
     # -------------------------------------------------------------------------
@@ -151,7 +161,7 @@ def upgrade() -> None:
             ('CONSAGRADO_FILHO_DA_LUZ', 'Consagrado Filho da Luz', 7)
         ) AS item(code, label, sort_order)
     """)
-    
+
     # =========================================================================
     # 3. ADICIONAR TABELA DE VERIFICAÇÃO DE EMAIL
     # =========================================================================
@@ -172,11 +182,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop email verifications table
     op.drop_table("email_verifications")
-    
+
     # Drop foreign keys
     op.drop_constraint("fk_profile_interested_ministry", "user_profiles", type_="foreignkey")
     op.drop_constraint("fk_profile_vocational_accompanist", "user_profiles", type_="foreignkey")
-    
+
     # Drop columns
     op.drop_column("user_profiles", "ministry_interest_notes")
     op.drop_column("user_profiles", "interested_ministry_id")

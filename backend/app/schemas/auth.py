@@ -8,8 +8,10 @@ from datetime import datetime
 # BASE
 # =============================================================================
 
+
 class BaseSchema(BaseModel):
     """Base para todos os schemas."""
+
     class Config:
         from_attributes = True
 
@@ -18,8 +20,10 @@ class BaseSchema(BaseModel):
 # REQUESTS
 # =============================================================================
 
+
 class RegisterRequest(BaseModel):
     """Registro de novo usuário."""
+
     email: EmailStr
     password: str = Field(..., min_length=6)
     full_name: str = Field(..., min_length=2)
@@ -27,6 +31,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """Login do usuário."""
+
     email: EmailStr
     password: str
 
@@ -35,14 +40,17 @@ class LoginRequest(BaseModel):
 # RESPONSES
 # =============================================================================
 
+
 class TokenResponse(BaseModel):
     """Resposta com token."""
+
     access_token: str
     token_type: str = "bearer"
 
 
 class AuthResponse(BaseModel):
     """Resposta de autenticação (login/registro)."""
+
     access_token: str
     token_type: str = "bearer"
     user_id: UUID
@@ -50,6 +58,7 @@ class AuthResponse(BaseModel):
 
 class IdentityOut(BaseModel):
     """Identity do usuário."""
+
     provider: str
     provider_uid: str
     email: Optional[str] = None
@@ -61,6 +70,7 @@ class IdentityOut(BaseModel):
 
 class ConsentsStatus(BaseModel):
     """Status dos consentimentos."""
+
     status: str  # "pending" | "accepted"
     pending_terms: bool = False
     pending_privacy: bool = False
@@ -68,6 +78,7 @@ class ConsentsStatus(BaseModel):
 
 class MembershipOut(BaseModel):
     """Membership do usuário."""
+
     id: UUID
     org_unit_id: UUID
     org_unit_name: str
@@ -82,6 +93,7 @@ class MembershipOut(BaseModel):
 
 class InviteOut(BaseModel):
     """Convite pendente."""
+
     id: UUID
     org_unit_id: UUID
     org_unit_name: str
@@ -99,6 +111,7 @@ class InviteOut(BaseModel):
 
 class UserMeResponse(BaseModel):
     """Resposta completa do /me."""
+
     user_id: UUID
     is_active: bool = True
     identities: List[IdentityOut] = []
