@@ -52,6 +52,15 @@ const ACCOMMODATION_OPTIONS = [
   { value: 'COLCHAO_INFLAVEL', label: 'Colchão Inflável' },
 ];
 
+const INSTRUMENTS = [
+  'Violão', 'Guitarra', 'Bateria', 'Teclado', 'Voz',
+  'Flauta', 'Saxofone', 'Trompete', 'Piano', 'Contrabaixo', 'Outro',
+];
+
+const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+const TURNS = ['Manhã', 'Tarde', 'Noite'];
+const availKey = (day: string, turn: string) => `${day}-${turn}`;
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -136,6 +145,12 @@ export default function ProfileScreen() {
   const [editIsFromMission, setEditIsFromMission] = useState(false);
   const [editMissionName, setEditMissionName] = useState('');
 
+  // Campos — Música
+  const [editPlaysInstrument, setEditPlaysInstrument] = useState(false);
+  const [editInstrumentNames, setEditInstrumentNames] = useState<string[]>([]);
+  const [editAvailableForGroup, setEditAvailableForGroup] = useState(false);
+  const [editMusicAvailability, setEditMusicAvailability] = useState<string[]>([]);
+
   // Campos — Contato de Emergência
   const [editEmergencyName, setEditEmergencyName] = useState('');
   const [editEmergencyRelationship, setEditEmergencyRelationship] = useState('');
@@ -212,6 +227,10 @@ export default function ProfileScreen() {
     setEditHealthInsuranceName(profile.health_insurance_name ?? '');
     setEditIsFromMission(profile.is_from_mission ?? false);
     setEditMissionName(profile.mission_name ?? '');
+    setEditPlaysInstrument(profile.plays_instrument ?? false);
+    setEditInstrumentNames(profile.instrument_names ?? []);
+    setEditAvailableForGroup(profile.available_for_group ?? false);
+    setEditMusicAvailability(profile.music_availability ?? []);
     const ec = profile.emergency_contacts?.[0];
     setEditEmergencyName(ec?.name ?? '');
     setEditEmergencyRelationship(ec?.relationship ?? '');
@@ -275,6 +294,10 @@ export default function ProfileScreen() {
         is_from_mission: editIsFromMission,
         mission_name: editIsFromMission ? editMissionName.trim() || null : null,
         despertar_encounter: editDespertar || null,
+        plays_instrument: editPlaysInstrument,
+        instrument_names: editPlaysInstrument ? editInstrumentNames : null,
+        available_for_group: editPlaysInstrument ? editAvailableForGroup : null,
+        music_availability: editPlaysInstrument && editAvailableForGroup ? editMusicAvailability : null,
       });
 
       // Salva contato de emergência se nome preenchido
@@ -415,6 +438,29 @@ export default function ProfileScreen() {
             ? <InfoRow icon="document-text-outline" label="Observações" value={profile.ministry_interest_notes} last />
             : <View style={{ height: 2 }} />
           }
+        </View>
+
+        {/* ── Música e Ministério Musical ── */}
+        <SectionTitle>Música e Ministério Musical</SectionTitle>
+        <View style={styles.card}>
+          <InfoRow icon="musical-notes-outline" label="Toca instrumento ou canta"
+            value={profile?.plays_instrument == null ? undefined
+              : profile.plays_instrument ? 'Sim' : 'Não'} />
+          {profile?.plays_instrument && profile.instrument_names?.length ? (
+            <InfoRow icon="musical-note-outline" label="Instrumento(s)"
+              value={profile.instrument_names.join(', ')} />
+          ) : null}
+          {profile?.plays_instrument ? (
+            <InfoRow icon="people-outline" label="Disponível para grupo"
+              value={profile.available_for_group == null ? undefined
+                : profile.available_for_group ? 'Sim' : 'Não'} />
+          ) : null}
+          {profile?.plays_instrument && profile.available_for_group && profile.music_availability?.length ? (
+            <InfoRow icon="time-outline" label="Disponibilidade"
+              value={profile.music_availability.join(', ')} last />
+          ) : (
+            <View style={{ height: 2 }} />
+          )}
         </View>
 
         {/* ── Contato de Emergência ── */}
@@ -583,6 +629,93 @@ export default function ProfileScreen() {
                   placeholder="Em qual(is) ministério(s) tem interesse e por quê..."
                   multiline numberOfLines={4} />
                 {editErrors.ministryNotes ? <Text style={styles.editError}>{editErrors.ministryNotes}</Text> : null}
+              </>
+            )}
+
+            {/* ─ Música e Ministério Musical ─ */}
+            <Text style={[styles.editSection, { marginTop: 8 }]}>Música e Ministério Musical</Text>
+
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Toca instrumento ou canta?</Text>
+              <Switch value={editPlaysInstrument}
+                onValueChange={v => {
+                  setEditPlaysInstrument(v);
+                  if (!v) {
+                    setEditInstrumentNames([]);
+                    setEditAvailableForGroup(false);
+                    setEditMusicAvailability([]);
+                  }
+                }}
+                trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
+                thumbColor={editPlaysInstrument ? PRIMARY : '#9ca3af'} />
+            </View>
+
+            {editPlaysInstrument && (
+              <>
+                <Text style={styles.editLabel}>Qual(is) instrumento(s)?</Text>
+                <View style={styles.chipsContainer}>
+                  {INSTRUMENTS.map(inst => {
+                    const selected = editInstrumentNames.includes(inst);
+                    return (
+                      <TouchableOpacity
+                        key={inst}
+                        style={[styles.chip, selected && styles.chipSelected]}
+                        onPress={() => setEditInstrumentNames(prev =>
+                          selected ? prev.filter(i => i !== inst) : [...prev, inst]
+                        )}
+                      >
+                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                          {inst}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <View style={[styles.toggleRow, { marginTop: 12 }]}>
+                  <Text style={styles.toggleLabel}>Disponível para servir em grupo?</Text>
+                  <Switch value={editAvailableForGroup}
+                    onValueChange={v => {
+                      setEditAvailableForGroup(v);
+                      if (!v) setEditMusicAvailability([]);
+                    }}
+                    trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
+                    thumbColor={editAvailableForGroup ? PRIMARY : '#9ca3af'} />
+                </View>
+
+                {editAvailableForGroup && (
+                  <>
+                    <Text style={styles.editLabel}>Quais dias e turnos?</Text>
+                    <View style={styles.availGrid}>
+                      <View style={styles.availHeaderRow}>
+                        <View style={styles.availDayCell} />
+                        {TURNS.map(turn => (
+                          <Text key={turn} style={styles.availTurnHeader}>{turn}</Text>
+                        ))}
+                      </View>
+                      {DAYS.map(day => (
+                        <View key={day} style={styles.availRow}>
+                          <Text style={styles.availDayLabel}>{day}</Text>
+                          {TURNS.map(turn => {
+                            const key = availKey(day, turn);
+                            const checked = editMusicAvailability.includes(key);
+                            return (
+                              <TouchableOpacity
+                                key={turn}
+                                style={[styles.availCell, checked && styles.availCellChecked]}
+                                onPress={() => setEditMusicAvailability(prev =>
+                                  checked ? prev.filter(k => k !== key) : [...prev, key]
+                                )}
+                              >
+                                {checked && <Ionicons name="checkmark" size={14} color={WHITE} />}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
               </>
             )}
 
@@ -876,6 +1009,32 @@ const styles = StyleSheet.create({
     marginTop: 12, borderWidth: 1, borderColor: '#FECACA',
   },
   saveErrorText: { color: '#B91C1C', fontSize: 13, textAlign: 'center' },
+
+  // Chips de instrumento
+  chipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#d1d5db', backgroundColor: WHITE,
+  },
+  chipSelected: { borderColor: PRIMARY, backgroundColor: `${PRIMARY}15` },
+  chipText: { fontSize: 14, color: GRAY, fontWeight: '500' },
+  chipTextSelected: { color: PRIMARY, fontWeight: '700' },
+
+  // Grade de disponibilidade
+  availGrid: {
+    backgroundColor: WHITE, borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb',
+    marginBottom: 12, overflow: 'hidden',
+  },
+  availHeaderRow: { flexDirection: 'row', backgroundColor: '#f9fafb', paddingVertical: 8, paddingHorizontal: 10 },
+  availTurnHeader: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '700', color: GRAY },
+  availRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
+  availDayCell: { width: 62 },
+  availDayLabel: { width: 62, fontSize: 12, color: '#374151', fontWeight: '500' },
+  availCell: {
+    flex: 1, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 3, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb',
+  },
+  availCellChecked: { backgroundColor: PRIMARY, borderColor: PRIMARY },
 
   subOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   subSheet: { backgroundColor: WHITE, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },

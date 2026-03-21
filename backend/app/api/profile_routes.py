@@ -6,6 +6,7 @@ CRUD de perfil, catálogos e contatos de emergência.
 Schemas vivem em app.schemas.profile — este módulo apenas orquestra.
 """
 
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -297,6 +298,21 @@ def _apply_profile_fields(
     profile.mission_name = body.mission_name if body.is_from_mission else None
     profile.despertar_encounter = body.despertar_encounter
 
+    # Música / Instrumentos
+    profile.plays_instrument = body.plays_instrument
+    if body.plays_instrument:
+        profile.instrument_names = json.dumps(body.instrument_names) if body.instrument_names else None
+        profile.available_for_group = body.available_for_group
+        profile.music_availability = (
+            json.dumps(body.music_availability)
+            if body.available_for_group and body.music_availability
+            else None
+        )
+    else:
+        profile.instrument_names = None
+        profile.available_for_group = None
+        profile.music_availability = None
+
     if body.photo_url:
         profile.photo_url = body.photo_url
 
@@ -369,6 +385,14 @@ def _create_profile(
         is_from_mission=body.is_from_mission,
         mission_name=body.mission_name if body.is_from_mission else None,
         despertar_encounter=body.despertar_encounter,
+        plays_instrument=body.plays_instrument,
+        instrument_names=json.dumps(body.instrument_names) if body.plays_instrument and body.instrument_names else None,
+        available_for_group=body.available_for_group if body.plays_instrument else None,
+        music_availability=(
+            json.dumps(body.music_availability)
+            if body.plays_instrument and body.available_for_group and body.music_availability
+            else None
+        ),
         status="COMPLETE"
         if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state])
         else "INCOMPLETE",
@@ -437,6 +461,10 @@ def _build_profile_response(profile: UserProfile, db: DBSession) -> ProfileWithL
         is_from_mission=profile.is_from_mission,
         mission_name=profile.mission_name,
         despertar_encounter=profile.despertar_encounter,
+        plays_instrument=profile.plays_instrument,
+        instrument_names=json.loads(profile.instrument_names) if profile.instrument_names else None,
+        available_for_group=profile.available_for_group,
+        music_availability=json.loads(profile.music_availability) if profile.music_availability else None,
         emergency_contacts=emergency_contacts,
         status=profile.status,
         completed_at=profile.completed_at,

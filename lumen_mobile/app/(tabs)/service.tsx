@@ -464,9 +464,9 @@ export default function OracoesScreen() {
         </View>
       ) : null}
 
-      {/* ── SAGRADAS ESCRITURAS ─────────────────────────────────────── */}
+      {/* ── ESCRITURAS E MAGISTÉRIO ─────────────────────────────────── */}
       <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
-        Sagradas Escrituras
+        Escrituras e Magistério
       </Text>
 
       <TouchableOpacity

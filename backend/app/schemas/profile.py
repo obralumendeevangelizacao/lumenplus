@@ -60,6 +60,12 @@ class ProfileUpdateRequest(BaseSchema):
     mission_name: Optional[str] = Field(None, max_length=200)
     despertar_encounter: Optional[str] = Field(None, max_length=100)
 
+    # Música / Instrumentos
+    plays_instrument: Optional[bool] = None
+    instrument_names: Optional[list[str]] = None  # ex: ["Violão", "Voz"]
+    available_for_group: Optional[bool] = None
+    music_availability: Optional[list[str]] = None  # ex: ["Segunda-Manhã", "Sexta-Noite"]
+
     @field_validator("cpf")
     @classmethod
     def clean_cpf(cls, v: str) -> str:
@@ -139,6 +145,12 @@ class ProfileOut(BaseSchema):
     is_from_mission: Optional[bool] = None
     mission_name: Optional[str] = None
     despertar_encounter: Optional[str] = None
+
+    # Música / Instrumentos
+    plays_instrument: Optional[bool] = None
+    instrument_names: Optional[list[str]] = None
+    available_for_group: Optional[bool] = None
+    music_availability: Optional[list[str]] = None
 
     # Contatos de emergência
     emergency_contacts: list[EmergencyContactOut] = []

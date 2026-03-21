@@ -227,6 +227,12 @@ class UserProfile(Base):
     mission_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     despertar_encounter: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # MÚSICA / INSTRUMENTOS
+    plays_instrument: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    instrument_names: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+    available_for_group: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    music_availability: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON array
+
     # STATUS
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="INCOMPLETE")
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

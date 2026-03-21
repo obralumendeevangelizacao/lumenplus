@@ -69,6 +69,11 @@ export interface Profile {
   is_from_mission: boolean | null;
   mission_name: string | null;
   despertar_encounter: string | null;
+  // Música / Instrumentos
+  plays_instrument: boolean | null;
+  instrument_names: string[] | null;
+  available_for_group: boolean | null;
+  music_availability: string[] | null;
   // Contatos de emergência
   emergency_contacts: EmergencyContact[];
   // Status
@@ -114,6 +119,11 @@ export interface ProfileUpdateRequest {
   is_from_mission?: boolean | null;
   mission_name?: string | null;
   despertar_encounter?: string | null;
+  // Música / Instrumentos
+  plays_instrument?: boolean | null;
+  instrument_names?: string[] | null;
+  available_for_group?: boolean | null;
+  music_availability?: string[] | null;
 }
 
 export interface EmergencyContact {
