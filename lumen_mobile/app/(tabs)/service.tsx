@@ -484,6 +484,22 @@ export default function OracoesScreen() {
         <Ionicons name="chevron-forward" size={20} color={PRIMARY} />
       </TouchableOpacity>
 
+      {/* ── CATECISMO ───────────────────────────────────────────────── */}
+      <TouchableOpacity
+        style={styles.catecismoCard}
+        onPress={() => router.push('/catecismo' as any)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.catecismoIconContainer}>
+          <Ionicons name="library" size={28} color={WHITE} />
+        </View>
+        <View style={styles.escriturasTextContainer}>
+          <Text style={styles.catecismoTitle}>Catecismo da Igreja Católica</Text>
+          <Text style={styles.escriturasSubtitle}>2537 parágrafos • Edição Loyola</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#7c3aed" />
+      </TouchableOpacity>
+
       {/* ── MISTÉRIOS DO SANTO TERÇO ────────────────────────────────── */}
       <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
         Mistérios do Santo Terço
@@ -737,6 +753,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: GRAY,
     marginTop: 2,
+  },
+  catecismoCard: {
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(124,58,237,0.3)',
+  },
+  catecismoIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#7c3aed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  catecismoTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#171717',
   },
   escriturasCard: {
     backgroundColor: WHITE,
