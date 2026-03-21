@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '@/config/firebase';
 import api from '@/services/api';
+import { getVersiculoDoDia } from '@/services/bible';
 
 const colors = {
   primary: '#1A859B',
@@ -204,6 +205,26 @@ export default function HomeScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Versículo do Dia */}
+      {(() => {
+        const v = getVersiculoDoDia();
+        if (!v.texto) return null;
+        return (
+          <TouchableOpacity
+            style={styles.versiculoCard}
+            onPress={() => router.push('/biblia' as any)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.versiculoHeader}>
+              <Ionicons name="book-outline" size={16} color={colors.primary} />
+              <Text style={styles.versiculoLabel}>Versículo do Dia</Text>
+            </View>
+            <Text style={styles.versiculoTexto}>"{v.texto}"</Text>
+            <Text style={styles.versiculoRef}>{v.referencia}</Text>
+          </TouchableOpacity>
+        );
+      })()}
+
       {/* Avisos Section */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Avisos</Text>
@@ -390,6 +411,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#b45309',
+  },
+  // Versículo do Dia
+  versiculoCard: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  versiculoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  versiculoLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  versiculoTexto: {
+    fontSize: 15,
+    color: '#374151',
+    lineHeight: 24,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  versiculoRef: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+    textAlign: 'right',
   },
   // Section
   sectionHeader: {

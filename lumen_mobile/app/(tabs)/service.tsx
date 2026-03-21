@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 // =============================================================================
@@ -463,6 +464,26 @@ export default function OracoesScreen() {
         </View>
       ) : null}
 
+      {/* ── SAGRADAS ESCRITURAS ─────────────────────────────────────── */}
+      <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
+        Sagradas Escrituras
+      </Text>
+
+      <TouchableOpacity
+        style={styles.escriturasCard}
+        onPress={() => router.push('/biblia' as any)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.escriturasIconContainer}>
+          <Ionicons name="book" size={28} color={WHITE} />
+        </View>
+        <View style={styles.escriturasTextContainer}>
+          <Text style={styles.escriturasTitle}>Bíblia Ave Maria</Text>
+          <Text style={styles.escriturasSubtitle}>73 livros • Edição Católica</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={PRIMARY} />
+      </TouchableOpacity>
+
       {/* ── MISTÉRIOS DO SANTO TERÇO ────────────────────────────────── */}
       <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
         Mistérios do Santo Terço
@@ -713,6 +734,38 @@ const styles = StyleSheet.create({
     color: '#171717',
   },
   misterioDia: {
+    fontSize: 13,
+    color: GRAY,
+    marginTop: 2,
+  },
+  escriturasCard: {
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: `${PRIMARY}40`,
+  },
+  escriturasIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  escriturasTextContainer: {
+    flex: 1,
+  },
+  escriturasTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#171717',
+  },
+  escriturasSubtitle: {
     fontSize: 13,
     color: GRAY,
     marginTop: 2,
