@@ -370,6 +370,7 @@ class OrgUnit(Base):
         server_default="PUBLIC",
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    retreat_scope: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

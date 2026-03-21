@@ -216,6 +216,7 @@ export interface Membership {
   org_unit_id: string;
   org_unit_name: string;
   org_unit_type: string;
+  retreat_scope?: boolean;
   role: string;         // era role_code — alinhado com backend (MembershipOut.role)
   status: MembershipStatus;
   joined_at: string;    // era created_at — alinhado com backend (MembershipOut.joined_at)

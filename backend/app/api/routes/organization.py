@@ -524,8 +524,9 @@ async def get_my_memberships(
                 "org_unit_id": str(m.org_unit_id),
                 "org_unit_name": m.org_unit.name,
                 "org_unit_type": m.org_unit.type.value,
+                "retreat_scope": m.org_unit.retreat_scope,
                 "role": m.role.value,
-                "status": m.status.value,  # era ausente — mobile Membership.status ficava undefined
+                "status": m.status.value,
                 "joined_at": m.joined_at.isoformat(),
             }
         )
@@ -669,3 +670,25 @@ async def update_org_unit_endpoint(
         slug=unit.slug,
         created_at=unit.created_at,
     )
+
+
+@router.patch("/units/{unit_id}/retreat-scope")
+async def set_retreat_scope(
+    unit_id: UUID,
+    user: CurrentUser,
+    db: DBSession,
+    enabled: bool = True,
+):
+    """Ativa ou desativa escopo de retiro numa unidade organizacional. Requer ADMIN ou DEV."""
+    roles = get_user_global_roles(db, user.id)
+    if not any(r in roles for r in ("ADMIN", "DEV")):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Apenas administradores podem configurar este campo"},
+        )
+    unit = db.get(OrgUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"})
+    unit.retreat_scope = enabled
+    db.commit()
+    return {"id": str(unit.id), "name": unit.name, "retreat_scope": unit.retreat_scope}

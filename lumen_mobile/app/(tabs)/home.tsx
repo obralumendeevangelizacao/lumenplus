@@ -38,6 +38,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [isCoordinator, setIsCoordinator] = useState(false);
+  const [hasRetreatAccess, setHasRetreatAccess] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -63,12 +64,14 @@ export default function HomeScreen() {
         if (firebaseName) setUserName(firebaseName.trim().split(' ')[0]);
       }
 
-      // Verificar permissões de admin
+      // Verificar permissões de admin e retiro
       try {
-        const permResponse = await api.get<{ has_admin_access: boolean }>('/inbox/permissions');
+        const permResponse = await api.get<{ has_admin_access: boolean; has_retreat_access: boolean }>('/inbox/permissions');
         setHasAdminAccess(permResponse.has_admin_access || false);
+        setHasRetreatAccess(permResponse.has_retreat_access || false);
       } catch {
         setHasAdminAccess(false);
+        setHasRetreatAccess(false);
       }
 
       // Verificar se é coordenador de alguma unidade
@@ -168,7 +171,7 @@ export default function HomeScreen() {
       )}
 
       {/* Coordinator Button */}
-      {isCoordinator && !hasAdminAccess && (
+      {isCoordinator && !hasAdminAccess && !hasRetreatAccess && (
         <TouchableOpacity
           style={styles.coordButton}
           onPress={() => router.push('/coordinator')}
@@ -181,6 +184,23 @@ export default function HomeScreen() {
             <Text style={styles.adminSubtitle}>Membros e convites da sua unidade</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={colors.coord} />
+        </TouchableOpacity>
+      )}
+
+      {/* Retreat Ministry Button */}
+      {hasRetreatAccess && !hasAdminAccess && (
+        <TouchableOpacity
+          style={styles.retreatButton}
+          onPress={() => router.push('/coordinator')}
+        >
+          <View style={styles.retreatIconContainer}>
+            <Ionicons name="compass" size={24} color={colors.white} />
+          </View>
+          <View style={styles.adminTextContainer}>
+            <Text style={styles.retreatTitle}>Ministério de Retiro</Text>
+            <Text style={styles.adminSubtitle}>Retiros, equipes e inscrições</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#b45309" />
         </TouchableOpacity>
       )}
 
@@ -345,6 +365,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.coord,
+  },
+  // Retreat Ministry Button
+  retreatButton: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#b45309',
+  },
+  retreatIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#b45309',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  retreatTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#b45309',
   },
   // Section
   sectionHeader: {

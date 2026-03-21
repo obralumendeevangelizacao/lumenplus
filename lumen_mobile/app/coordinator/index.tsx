@@ -58,8 +58,10 @@ export default function CoordinatorScreen() {
     (async () => {
       try {
         const memberships = await orgService.getMyMemberships();
+        // Mostra: coordenadores de qualquer unidade + membros de unidades com retreat_scope
         const coordUnits = memberships.filter(
-          (m) => m.role === 'COORDINATOR' && m.status === 'ACTIVE'
+          (m) => m.status === 'ACTIVE' &&
+            (m.role === 'COORDINATOR' || m.retreat_scope === true)
         );
         setUnits(coordUnits);
       } catch {
@@ -116,8 +118,10 @@ export default function CoordinatorScreen() {
           const typeLabel = ORG_UNIT_TYPE_LABEL[unit.org_unit_type] ?? unit.org_unit_type;
           const typeIcon = (ORG_UNIT_TYPE_ICON[unit.org_unit_type] ?? 'people') as any;
 
-          const options: CoordOption[] = [
-            {
+          const options: CoordOption[] = [];
+
+          if (unit.role === 'COORDINATOR') {
+            options.push({
               id: 'members',
               title: 'Membros',
               description: 'Veja, convide e gerencie os membros',
@@ -130,8 +134,18 @@ export default function CoordinatorScreen() {
                     org_unit_name: unit.org_unit_name,
                   },
                 }),
-            },
-          ];
+            });
+          }
+
+          if (unit.retreat_scope) {
+            options.push({
+              id: 'retreats',
+              title: 'Retiros',
+              description: 'Crie e gerencie retiros e inscrições',
+              icon: 'compass-outline',
+              onPress: () => router.push('/admin/retreats' as any),
+            });
+          }
 
           return (
             <View key={unit.org_unit_id} style={styles.unitSection}>

@@ -9,7 +9,10 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from fastapi.routing import APIRouter
 
+from sqlalchemy import select
+
 from app.api.deps import CurrentUser, DBSession
+from app.db.models import OrgMembership, OrgUnit, MembershipStatus
 from app.services.inbox_service import InboxService, PERMISSION_SEND_INBOX
 from app.services.organization import get_user_global_roles, is_conselho_geral_coordinator
 from app.schemas.inbox import (
@@ -167,10 +170,27 @@ def get_my_permissions(
         or any(r in global_roles for r in ["DEV", "ADMIN", "SECRETARY", "AVISOS"])
         or is_conselho_geral_coordinator(db, current_user.id)
     )
+    # Verifica acesso a retiros: ADMIN/DEV, PERMISSION_MANAGE_RETREATS ou
+    # membro ativo de qualquer unidade com retreat_scope=True
+    from app.api.admin_retreat_routes import _is_global_retreat_manager
+    has_retreat = _is_global_retreat_manager(db, current_user.id)
+    if not has_retreat:
+        retreat_membership = db.execute(
+            select(OrgMembership)
+            .join(OrgUnit, OrgUnit.id == OrgMembership.org_unit_id)
+            .where(
+                OrgMembership.user_id == current_user.id,
+                OrgMembership.status == MembershipStatus.ACTIVE,
+                OrgUnit.retreat_scope.is_(True),
+            )
+        ).scalar_one_or_none()
+        has_retreat = retreat_membership is not None
+
     return UserPermissionsResponse(
         permissions=permissions,
         has_admin_access=has_admin,
         is_global_admin=is_global_admin,
+        has_retreat_access=has_retreat,
     )
 
 

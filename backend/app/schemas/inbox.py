@@ -197,3 +197,4 @@ class UserPermissionsResponse(BaseModel):
     permissions: list[str]
     has_admin_access: bool
     is_global_admin: bool = False
+    has_retreat_access: bool = False

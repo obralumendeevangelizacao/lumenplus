@@ -36,7 +36,9 @@ from app.db.models import (
     InboxMessage,
     InboxMessageType,
     InboxRecipient,
+    MembershipStatus,
     OrgMembership,
+    OrgUnit,
     Retreat,
     RetreatCoordinator,
     RetreatEligibilityRule,
@@ -83,7 +85,9 @@ ALL_FEE_CATEGORIES = list(FEE_CATEGORY_LABELS.keys())
 # ---------------------------------------------------------------------------
 
 def _is_global_retreat_manager(db, user_id: UUID) -> bool:
-    """Verifica se o usuário é gestor global de retiros (ADMIN/DEV ou PERMISSION_MANAGE_RETREATS)."""
+    """Verifica se o usuário é gestor de retiros.
+    Critérios: ADMIN/DEV, PERMISSION_MANAGE_RETREATS ou membro ativo de unidade com retreat_scope=True.
+    """
     roles = db.execute(
         select(GlobalRole.code)
         .join(UserGlobalRole, UserGlobalRole.global_role_id == GlobalRole.id)
@@ -97,7 +101,19 @@ def _is_global_retreat_manager(db, user_id: UUID) -> bool:
             UserPermission.permission_code == PERMISSION_MANAGE_RETREATS,
         )
     ).scalar_one_or_none()
-    return perm is not None
+    if perm is not None:
+        return True
+    # Membro ativo de qualquer unidade com retreat_scope = True
+    retreat_membership = db.execute(
+        select(OrgMembership)
+        .join(OrgUnit, OrgUnit.id == OrgMembership.org_unit_id)
+        .where(
+            OrgMembership.user_id == user_id,
+            OrgMembership.status == MembershipStatus.ACTIVE,
+            OrgUnit.retreat_scope.is_(True),
+        )
+    ).scalar_one_or_none()
+    return retreat_membership is not None
 
 
 def _require_retreat_manager(db, user_id: UUID, retreat_id: UUID | None = None) -> None:
