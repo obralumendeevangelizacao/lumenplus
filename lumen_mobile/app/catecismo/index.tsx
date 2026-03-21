@@ -235,7 +235,7 @@ function ModoIndice() {
                     ) : null}
 
                     {(!secao.titulo || secaoOpen) &&
-                      secao.capitulos.map((cap, ci) => {
+                      secao.capitulos.filter(cap => cap.titulo || cap.artigos.length > 0).map((cap, ci) => {
                         const capKey = `${secaoKey}c${ci}`;
                         const capOpen = expandidos.has(capKey);
                         return (

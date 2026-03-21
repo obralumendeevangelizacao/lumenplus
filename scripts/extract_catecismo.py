@@ -12,6 +12,15 @@ import sys
 PDF_PATH = r"C:\Users\Elias\Documents\Catecismo da Igreja Católica (Loyola).pdf"
 OUTPUT_PATH = r"C:\Users\Elias\Documents\Projeto Lumen+\lumenplus-main\lumen_mobile\assets\catecismo.json"
 
+# Pular o índice + documentos introdutórios (sumário ocupa páginas 1-40).
+# A hierarquia real começa só a partir da página 41 (§1 — Prólogo).
+START_PAGE = 40  # 0-indexed
+
+# §1-§25 são o Prólogo: não pertencem a nenhuma das quatro Partes.
+# Qualquer marcador de hierarquia detectado antes de §26 deve ser ignorado
+# (o Prólogo menciona "QUARTA PARTE: …" como descrição estrutural, não como header real).
+PROLOGO_FIM = 25
+
 # Padrões de hierarquia — detectados pelo texto em MAIÚSCULAS no PDF
 PARTE_NOMES = {
     'PRIMEIRA': 'Primeira',
@@ -33,15 +42,13 @@ def clean(t: str) -> str:
 
 
 def extract(pdf_path: str):
-    """
-    Retorna lista de candidatos a parágrafo:
-    [(page_idx, line_idx, num, text_so_far)]
-    e lista de linhas por página.
-    """
     pages_lines = []
     with pdfplumber.open(pdf_path) as pdf:
         total = len(pdf.pages)
         for i, page in enumerate(pdf.pages):
+            if i < START_PAGE:
+                pages_lines.append([])  # placeholder — será ignorado
+                continue
             raw = page.extract_text() or ''
             lines = [clean(l) for l in raw.split('\n') if clean(l)]
             pages_lines.append(lines)
@@ -51,89 +58,100 @@ def extract(pdf_path: str):
 
 
 def parse(pages_lines):
-    # Contexto de hierarquia
     ctx = dict(
         parte='', parte_titulo='',
         secao='', secao_titulo='',
         capitulo='', capitulo_titulo='',
-        artigo=0,  artigo_titulo='',
+        artigo=0, artigo_titulo='',
     )
 
-    # Candidatos: (num, texto, ctx_snapshot)
     candidates = []
-
-    # Dentro de cada página, detectamos se entrou em seção "Notas"
     current_num = None
     current_text_parts = []
+    # Rastreia o maior parágrafo já aceito para saber se ainda estamos no Prólogo
+    max_accepted = 0
 
     def snapshot():
         return dict(ctx)
 
     def flush():
-        nonlocal current_num, current_text_parts
+        nonlocal current_num, current_text_parts, max_accepted
         if current_num is not None and current_text_parts:
             texto = ' '.join(current_text_parts).strip()
             if len(texto) > 5:
                 candidates.append((current_num, texto, snapshot()))
+                if current_num > max_accepted:
+                    max_accepted = current_num
         current_num = None
         current_text_parts = []
+
+    def in_prologo():
+        """Ainda dentro do Prólogo (§1-§25): não atualizar hierarquia.
+        Usa < (não <=) para que a detecção de 'PRIMEIRA PARTE' na página 47
+        já funcione após §25 ter sido aceito (max_accepted == 25)."""
+        return max_accepted < PROLOGO_FIM
 
     for page_lines in pages_lines:
         in_notes_section = False
 
         for line in page_lines:
-            # Início de seção de Notas → para tudo até próxima página
             if RE_NOTAS.match(line):
                 flush()
                 in_notes_section = True
                 continue
 
             if in_notes_section:
-                # Checar se voltou conteúdo (hierarquia ou parágrafo alto)
                 m = RE_PARA.match(line)
                 if m and int(m.group(1)) > (candidates[-1][0] if candidates else 0):
                     in_notes_section = False
-                    # Cai no processamento normal abaixo
                 else:
                     continue
 
-            # Hierarquia
+            # Hierarquia — só atualiza fora do Prólogo
             if RE_PARTE.match(line):
                 flush()
-                for k, v in PARTE_NOMES.items():
-                    if k in line.upper():
-                        ctx['parte'] = v
-                        break
-                # Título vem na mesma linha após "PARTE"
-                titulo = re.sub(r'^.+PARTE[:\s]*', '', line, flags=re.I).strip()
-                ctx['parte_titulo'] = titulo
-                ctx['secao'] = ''
-                ctx['capitulo'] = ''
-                ctx['artigo'] = 0
+                if not in_prologo():
+                    for k, v in PARTE_NOMES.items():
+                        if k in line.upper():
+                            ctx['parte'] = v
+                            break
+                    ctx['parte_titulo'] = re.sub(r'^.+PARTE[:\s]*', '', line, flags=re.I).strip()
+                    ctx['secao'] = ''
+                    ctx['secao_titulo'] = ''
+                    ctx['capitulo'] = ''
+                    ctx['capitulo_titulo'] = ''
+                    ctx['artigo'] = 0
+                    ctx['artigo_titulo'] = ''
                 continue
 
             if RE_SECAO.match(line):
                 flush()
-                m2 = re.match(r'^(\w+)\s+SEC', line, re.I)
-                ctx['secao'] = m2.group(1).capitalize() if m2 else ''
-                ctx['secao_titulo'] = re.sub(r'^.+SEC[ÇC][ÃA]O[:\s]*', '', line, flags=re.I).strip()
-                ctx['capitulo'] = ''
-                ctx['artigo'] = 0
+                if not in_prologo():
+                    m2 = re.match(r'^(\w+)\s+SEC', line, re.I)
+                    ctx['secao'] = m2.group(1).capitalize() if m2 else ''
+                    ctx['secao_titulo'] = re.sub(r'^.+SEC[ÇC][ÃA]O[:\s]*', '', line, flags=re.I).strip()
+                    ctx['capitulo'] = ''
+                    ctx['capitulo_titulo'] = ''
+                    ctx['artigo'] = 0
+                    ctx['artigo_titulo'] = ''
                 continue
 
             if RE_CAP.match(line):
                 flush()
-                m2 = RE_CAP.match(line)
-                ctx['capitulo'] = m2.group(1).capitalize() if m2 else ''
-                ctx['capitulo_titulo'] = re.sub(r'^CAP[ÍI]TULO\s+\w+[:\s]*', '', line, flags=re.I).strip()
-                ctx['artigo'] = 0
+                if not in_prologo():
+                    m2 = RE_CAP.match(line)
+                    ctx['capitulo'] = m2.group(1).capitalize() if m2 else ''
+                    ctx['capitulo_titulo'] = re.sub(r'^CAP[ÍI]TULO\s+\w+[:\s]*', '', line, flags=re.I).strip()
+                    ctx['artigo'] = 0
+                    ctx['artigo_titulo'] = ''
                 continue
 
             m = RE_ART.match(line)
             if m:
                 flush()
-                ctx['artigo'] = int(m.group(1))
-                ctx['artigo_titulo'] = m.group(2).strip()
+                if not in_prologo():
+                    ctx['artigo'] = int(m.group(1))
+                    ctx['artigo_titulo'] = m.group(2).strip()
                 continue
 
             # Candidato a parágrafo
@@ -146,7 +164,6 @@ def parse(pages_lines):
                 current_text_parts = [rest]
                 continue
 
-            # Continuação do parágrafo atual
             if current_num is not None:
                 current_text_parts.append(line)
 
@@ -163,6 +180,14 @@ def parse(pages_lines):
     for (num, texto, ctx_snap) in candidates:
         if num > max_num:
             max_num = num
+            # Parágrafo do Prólogo: limpar hierarquia
+            if num <= PROLOGO_FIM:
+                ctx_snap = dict(
+                    parte='Prólogo', parte_titulo='Prólogo',
+                    secao='', secao_titulo='',
+                    capitulo='', capitulo_titulo='',
+                    artigo=0, artigo_titulo='',
+                )
             filtered.append((num, texto, ctx_snap))
         # Se num < max_num - 5, é definitivamente nota: descartar
         # Se num == max_num: parágrafo repetido, ignorar
@@ -171,64 +196,108 @@ def parse(pages_lines):
 
 
 def build_estrutura(paragrafos):
-    """Constrói a árvore de navegação a partir dos parágrafos."""
-    partes = {}
-    for p in paragrafos:
-        parte_key = p['parte'] or 'Prólogo'
-        if parte_key not in partes:
-            partes[parte_key] = {
-                'titulo': p['parte_titulo'] or parte_key,
-                'secoes': {},
-                'paragrafos_inicio': p['num'],
-            }
-        parte = partes[parte_key]
+    """
+    Constrói a árvore de navegação preservando a ordem de aparição.
+    Usa listas ordenadas em vez de dicts para manter a ordem do PDF.
+    Nós com artigo=0 (sem artigo detectado) são agrupados como 'sem_artigo'
+    mas NÃO aparecem como entradas separadas no índice — ficam no capítulo pai.
+    """
+    # Estrutura: lista de partes, cada uma com lista de seções, caps, artigos
+    partes_order = []   # lista de chaves na ordem em que aparecem
+    partes_map = {}     # chave → objeto
 
-        secao_key = p['secao'] or '_'
-        if secao_key not in parte['secoes']:
-            parte['secoes'][secao_key] = {
-                'titulo': p['secao_titulo'] or '',
-                'capitulos': {},
-                'paragrafos_inicio': p['num'],
-            }
-        secao = parte['secoes'][secao_key]
-
-        cap_key = p['capitulo'] or '_'
-        if cap_key not in secao['capitulos']:
-            secao['capitulos'][cap_key] = {
-                'titulo': p['capitulo_titulo'] or '',
-                'artigos': {},
-                'paragrafos_inicio': p['num'],
-            }
-        cap = secao['capitulos'][cap_key]
-
-        art_key = str(p['artigo']) if p['artigo'] else '_'
-        if art_key not in cap['artigos']:
-            cap['artigos'][art_key] = {
-                'num': p['artigo'],
-                'titulo': p['artigo_titulo'] or '',
+    def get_or_create_parte(p):
+        key = p['parte'] or 'Prólogo'
+        if key not in partes_map:
+            partes_order.append(key)
+            partes_map[key] = {
+                'titulo': p['parte_titulo'] or key,
                 'paragrafo_inicio': p['num'],
                 'paragrafo_fim': p['num'],
+                'secoes_order': [],
+                'secoes_map': {},
             }
-        cap['artigos'][art_key]['paragrafo_fim'] = p['num']
+        obj = partes_map[key]
+        obj['paragrafo_fim'] = p['num']
+        return obj
 
-    # Converter para listas ordenadas
-    def dict_to_list(d, key_fn=lambda k: k):
-        return [v for k, v in sorted(d.items(), key=lambda x: key_fn(x[0]))]
+    def get_or_create_secao(parte_obj, p):
+        key = p['secao'] or '__'
+        if key not in parte_obj['secoes_map']:
+            parte_obj['secoes_order'].append(key)
+            parte_obj['secoes_map'][key] = {
+                'titulo': p['secao_titulo'] or '',
+                'paragrafo_inicio': p['num'],
+                'paragrafo_fim': p['num'],
+                'caps_order': [],
+                'caps_map': {},
+            }
+        obj = parte_obj['secoes_map'][key]
+        obj['paragrafo_fim'] = p['num']
+        return obj
 
+    def get_or_create_cap(secao_obj, p):
+        key = p['capitulo'] or '__'
+        if key not in secao_obj['caps_map']:
+            secao_obj['caps_order'].append(key)
+            secao_obj['caps_map'][key] = {
+                'titulo': p['capitulo_titulo'] or '',
+                'paragrafo_inicio': p['num'],
+                'paragrafo_fim': p['num'],
+                'artigos_order': [],
+                'artigos_map': {},
+            }
+        obj = secao_obj['caps_map'][key]
+        obj['paragrafo_fim'] = p['num']
+        return obj
+
+    for p in paragrafos:
+        parte_obj = get_or_create_parte(p)
+        secao_obj = get_or_create_secao(parte_obj, p)
+        cap_obj = get_or_create_cap(secao_obj, p)
+
+        art_num = p['artigo']
+        if art_num and art_num > 0:
+            art_key = str(art_num)
+            if art_key not in cap_obj['artigos_map']:
+                cap_obj['artigos_order'].append(art_key)
+                cap_obj['artigos_map'][art_key] = {
+                    'num': art_num,
+                    'titulo': p['artigo_titulo'] or '',
+                    'paragrafo_inicio': p['num'],
+                    'paragrafo_fim': p['num'],
+                }
+            cap_obj['artigos_map'][art_key]['paragrafo_fim'] = p['num']
+
+    # Serializar para listas simples
     result = []
-    for parte_key in partes:
-        parte = partes[parte_key]
-        secoes_list = []
-        for sec_key in parte['secoes']:
-            secao = parte['secoes'][sec_key]
-            caps_list = []
-            for cap_key in secao['capitulos']:
-                cap = secao['capitulos'][cap_key]
-                arts_list = list(cap['artigos'].values())
-                arts_list.sort(key=lambda a: a['num'] if a['num'] else 0)
-                caps_list.append({**cap, 'artigos': arts_list})
-            secoes_list.append({**secao, 'capitulos': caps_list})
-        result.append({**parte, 'secoes': secoes_list})
+    for pk in partes_order:
+        parte = partes_map[pk]
+        secoes = []
+        for sk in parte['secoes_order']:
+            secao = parte['secoes_map'][sk]
+            caps = []
+            for ck in secao['caps_order']:
+                cap = secao['caps_map'][ck]
+                artigos = [cap['artigos_map'][ak] for ak in cap['artigos_order']]
+                caps.append({
+                    'titulo': cap['titulo'],
+                    'paragrafo_inicio': cap['paragrafo_inicio'],
+                    'paragrafo_fim': cap['paragrafo_fim'],
+                    'artigos': artigos,
+                })
+            secoes.append({
+                'titulo': secao['titulo'],
+                'paragrafo_inicio': secao['paragrafo_inicio'],
+                'paragrafo_fim': secao['paragrafo_fim'],
+                'capitulos': caps,
+            })
+        result.append({
+            'titulo': parte['titulo'],
+            'paragrafo_inicio': parte['paragrafo_inicio'],
+            'paragrafo_fim': parte['paragrafo_fim'],
+            'secoes': secoes,
+        })
 
     return result
 
