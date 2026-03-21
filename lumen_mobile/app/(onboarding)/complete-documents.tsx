@@ -49,7 +49,7 @@ export default function CompleteDocumentsScreen() {
   const validate = () => {
     const e: Record<string, string> = {};
     if (cpf.replace(/\D/g, '').length !== 11) e.cpf = 'CPF deve ter 11 dígitos';
-    if (rg.trim().length < 4) e.rg = 'RG inválido';
+    if (!rg.trim()) e.rg = 'RG obrigatório';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -63,12 +63,19 @@ export default function CompleteDocumentsScreen() {
       // Busca perfil atual para não perder outros campos obrigatórios
       const current = await profileService.getProfile();
 
+      // Se o perfil básico não foi preenchido (cadastro incompleto),
+      // redireciona para o formulário completo em vez de falhar com 422
+      if (!current.full_name || !current.birth_date || !current.phone_e164 || !current.city || !current.state) {
+        router.replace('/(onboarding)/profile');
+        return;
+      }
+
       await profileService.updateProfile({
-        full_name: current.full_name ?? '',
-        birth_date: current.birth_date ?? '',
-        phone_e164: current.phone_e164 ?? '',
-        city: current.city ?? '',
-        state: current.state ?? '',
+        full_name: current.full_name,
+        birth_date: current.birth_date,
+        phone_e164: current.phone_e164,
+        city: current.city,
+        state: current.state,
         cpf: cpf.replace(/\D/g, ''),
         rg: rg.trim(),
         life_state_item_id: current.life_state_item_id ?? undefined,
@@ -77,8 +84,13 @@ export default function CompleteDocumentsScreen() {
       });
 
       router.replace('/(tabs)/home');
-    } catch {
-      setSaveError('Não foi possível salvar. Tente novamente.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      let msg = 'Não foi possível salvar. Tente novamente.';
+      if (typeof detail === 'string') msg = detail;
+      else if (detail?.message) msg = detail.message;
+      else if (Array.isArray(detail) && detail[0]?.msg) msg = `Dado inválido: ${detail[0].msg}`;
+      setSaveError(msg);
     } finally {
       setIsLoading(false);
     }

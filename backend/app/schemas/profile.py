@@ -21,7 +21,7 @@ class ProfileUpdateRequest(BaseSchema):
     full_name: str = Field(..., min_length=2, max_length=200)
     birth_date: date
     cpf: Optional[str] = Field(None, min_length=11, max_length=14)
-    rg: Optional[str] = Field(None, min_length=5, max_length=20)
+    rg: Optional[str] = Field(None, min_length=1, max_length=20)
     phone_e164: str = Field(..., pattern=r"^\+[1-9]\d{10,14}$")
     city: str = Field(..., min_length=2, max_length=100)
     state: str = Field(..., min_length=2, max_length=2)
