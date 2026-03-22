@@ -69,3 +69,5 @@ strapi/node_modules/
 # MISC
 #################################
 .cache/
+
+.claude/
