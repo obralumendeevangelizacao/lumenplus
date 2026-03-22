@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import type { IoniconsName } from '@/types/icons';
 import { auth } from '@/config/firebase';
 import { inboxService } from '@/services';
 import type { InboxListResponse } from '@/types';
@@ -165,7 +166,7 @@ export default function InboxScreen() {
         activeOpacity={0.7}
       >
         <View style={[styles.avisoIconContainer, { backgroundColor: `${icon.color}15` }]}>
-          <Ionicons name={icon.name as any} size={24} color={icon.color} />
+          <Ionicons name={icon.name as IoniconsName} size={24} color={icon.color} />
         </View>
         
         <View style={styles.avisoContent}>
@@ -261,7 +262,7 @@ export default function InboxScreen() {
                     { backgroundColor: `${getAvisoIcon(selectedAviso.type).color}15` }
                   ]}>
                     <Ionicons 
-                      name={getAvisoIcon(selectedAviso.type).name as any} 
+                      name={getAvisoIcon(selectedAviso.type).name as IoniconsName}
                       size={16} 
                       color={getAvisoIcon(selectedAviso.type).color} 
                     />

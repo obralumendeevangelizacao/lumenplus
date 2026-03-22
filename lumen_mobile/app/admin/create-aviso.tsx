@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { inboxService } from '@/services';
 import type { InboxPreviewResponse, InboxSendResponse, OrgScopeResponse, SendScopesResponse } from '@/types';
 
@@ -274,7 +275,7 @@ export default function CreateAvisoScreen() {
               style={[styles.typeButton, messageType === mt.type && { borderColor: mt.color, backgroundColor: `${mt.color}15` }]}
               onPress={() => setMessageType(mt.type)}
             >
-              <Ionicons name={mt.icon as any} size={20} color={mt.color} />
+              <Ionicons name={mt.icon as IoniconsName} size={20} color={mt.color} />
               <Text style={[styles.typeLabel, { color: messageType === mt.type ? mt.color : colors.gray }]}>{mt.label}</Text>
             </TouchableOpacity>
           ))}

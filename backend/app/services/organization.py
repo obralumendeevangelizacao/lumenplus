@@ -83,8 +83,9 @@ def can_edit_unit(db: Session, user_id: UUID, unit_id: UUID) -> bool:
     if not unit or not unit.is_active:
         return False
 
-    coord_memberships = db.execute(
-        select(OrgMembership)
+    # Busca os IDs das unidades onde o usuário é coordenador ativo
+    coord_unit_ids_result = db.execute(
+        select(OrgMembership.org_unit_id)
         .where(
             OrgMembership.user_id == user_id,
             OrgMembership.role == OrgRoleCode.COORDINATOR,
@@ -92,10 +93,19 @@ def can_edit_unit(db: Session, user_id: UUID, unit_id: UUID) -> bool:
         )
     ).scalars().all()
 
-    for m in coord_memberships:
-        coord_unit = db.get(OrgUnit, m.org_unit_id)
-        if not coord_unit or not coord_unit.is_active:
-            continue
+    if not coord_unit_ids_result:
+        return False
+
+    # Carrega todas as unidades coordenadas em uma única query (evita N+1)
+    coord_units = db.execute(
+        select(OrgUnit)
+        .where(
+            OrgUnit.id.in_(coord_unit_ids_result),
+            OrgUnit.is_active == True,  # noqa: E712
+        )
+    ).scalars().all()
+
+    for coord_unit in coord_units:
         if coord_unit.type == OrgUnitType.CONSELHO_GERAL:
             return True
         if coord_unit.type == OrgUnitType.CONSELHO_EXECUTIVO:

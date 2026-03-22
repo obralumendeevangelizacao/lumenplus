@@ -18,8 +18,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { buscar, getMeta, getTodosParagrafos } from '@/services/catecismo';
 
 const PRIMARY = '#7c3aed';
@@ -264,7 +265,7 @@ export default function CatecismoScreen() {
             onPress={() => setModo(tab.key)}
           >
             <Ionicons
-              name={tab.icon as any}
+              name={tab.icon as IoniconsName}
               size={18}
               color={modo === tab.key ? PRIMARY : GRAY}
             />

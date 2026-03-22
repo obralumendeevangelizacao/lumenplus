@@ -6,8 +6,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { auth } from '@/config/firebase';
 import api from '@/services/api';
 import { getVersiculoDoDia } from '@/services/bible';
@@ -212,7 +213,7 @@ export default function HomeScreen() {
         return (
           <TouchableOpacity
             style={styles.versiculoCard}
-            onPress={() => router.push('/biblia' as any)}
+            onPress={() => router.push('/biblia' as Href)}
             activeOpacity={0.85}
           >
             <View style={styles.versiculoHeader}>
@@ -247,7 +248,7 @@ export default function HomeScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.avisoIconContainer, { backgroundColor: `${icon.color}15` }]}>
-                  <Ionicons name={icon.name as any} size={24} color={icon.color} />
+                  <Ionicons name={icon.name as IoniconsName} size={24} color={icon.color} />
                 </View>
                 <View style={styles.avisoContent}>
                   <Text style={styles.avisoTitle} numberOfLines={1}>{aviso.title}</Text>
@@ -299,7 +300,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.quickActionCard}
-          onPress={() => router.push('/retreats' as any)}
+          onPress={() => router.push('/retreats' as Href)}
         >
           <Ionicons name="compass-outline" size={28} color={colors.primary} />
           <Text style={styles.quickActionText}>Retiros</Text>

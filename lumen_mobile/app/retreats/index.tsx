@@ -9,8 +9,9 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import api from '@/services/api';
 
 const colors = {
@@ -98,7 +99,7 @@ export default function RetreatsScreen() {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push(`/retreats/${item.id}` as any)}
+        onPress={() => router.push(`/retreats/${item.id}` as Href)}
         activeOpacity={0.8}
       >
         {/* Header */}
@@ -140,7 +141,7 @@ export default function RetreatsScreen() {
         {/* My registration status */}
         {regMeta && (
           <View style={[styles.regBadge, { backgroundColor: `${regMeta.color}18` }]}>
-            <Ionicons name={regMeta.icon as any} size={14} color={regMeta.color} />
+            <Ionicons name={regMeta.icon as IoniconsName} size={14} color={regMeta.color} />
             <Text style={[styles.regText, { color: regMeta.color }]}>{regMeta.label}</Text>
           </View>
         )}

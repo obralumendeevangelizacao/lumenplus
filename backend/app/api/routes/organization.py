@@ -8,11 +8,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import CurrentUser, DBSession
-from app.db.models import OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
 from sqlalchemy import select as sa_select
+from sqlalchemy.orm import selectinload
 
-from app.db.models import MembershipStatus, OrgMembership
+from app.api.deps import CurrentUser, DBSession
+from app.db.models import MembershipStatus, OrgMembership, OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
 from app.schemas.organization import (
     CreateOrgUnitRequest,
     InviteDetailOut,
@@ -165,20 +165,43 @@ async def get_organization_tree(
     user: CurrentUser,
     db: DBSession,
 ):
-    """Retorna árvore organizacional."""
-    root = get_org_tree(db, user.id)
+    """Retorna árvore organizacional.
+
+    Carrega todos os nós e memberships em 2 queries (eager loading) em vez de N+1.
+    """
+    # Carrega todas as unidades ativas com children e memberships de uma vez
+    all_units_result = db.execute(
+        sa_select(OrgUnit)
+        .where(OrgUnit.is_active == True)  # noqa: E712
+        .options(
+            selectinload(OrgUnit.memberships),
+        )
+    )
+    all_units = all_units_result.scalars().all()
+
+    if not all_units:
+        return OrgTreeResponse(root=None)
+
+    # Monta lookup e encontra raiz em Python (sem novas queries)
+    units_by_id: dict = {u.id: u for u in all_units}
+    root = next(
+        (u for u in all_units if u.type == OrgUnitType.CONSELHO_GERAL and u.parent_id is None),
+        None,
+    )
 
     if not root:
         return OrgTreeResponse(root=None)
 
     def build_tree(unit: OrgUnit, depth: int = 0) -> OrgUnitWithChildren:
         children = []
-        if depth < 5:  # Limita profundidade
-            for child in unit.children:
-                if child.is_active:
-                    # TODO: Filtrar por visibilidade
+        if depth < 5:
+            for child in all_units:
+                if child.parent_id == unit.id and child.is_active:
                     children.append(build_tree(child, depth + 1))
 
+        active_member_count = sum(
+            1 for m in unit.memberships if m.status == MembershipStatus.ACTIVE
+        )
         return OrgUnitWithChildren(
             id=unit.id,
             type=unit.type.value,
@@ -191,7 +214,7 @@ async def get_organization_tree(
             parent_id=unit.parent_id,
             created_at=unit.created_at,
             children=children,
-            member_count=len([m for m in unit.memberships if m.status.value == "ACTIVE"]),
+            member_count=active_member_count,
         )
 
     return OrgTreeResponse(root=build_tree(root))

@@ -341,7 +341,10 @@ class UserGlobalRole(Base):
     )
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (UniqueConstraint("user_id", "global_role_id", name="uq_user_global_role"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "global_role_id", name="uq_user_global_role"),
+        Index("idx_user_global_roles_user_id", "user_id"),
+    )
     user: Mapped["User"] = relationship(
         "User", back_populates="global_roles", foreign_keys=[user_id]
     )
@@ -381,6 +384,10 @@ class OrgUnit(Base):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("idx_org_units_parent_id", "parent_id"),
+    )
 
     parent: Mapped["OrgUnit | None"] = relationship(
         "OrgUnit", remote_side=[id], back_populates="children"
@@ -425,7 +432,11 @@ class OrgMembership(Base):
         PGUUID(as_uuid=True), ForeignKey("org_invites.id", ondelete="SET NULL"), nullable=True
     )
 
-    __table_args__ = (UniqueConstraint("user_id", "org_unit_id", name="uq_membership_user_org"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "org_unit_id", name="uq_membership_user_org"),
+        Index("idx_org_memberships_user_id", "user_id"),
+        Index("idx_org_memberships_org_unit_id", "org_unit_id"),
+    )
     user: Mapped["User"] = relationship(
         "User", back_populates="memberships", foreign_keys=[user_id]
     )
@@ -463,6 +474,11 @@ class OrgInvite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_org_invites_invited_user_id", "invited_user_id"),
+        Index("idx_org_invites_status", "status"),
+    )
 
     org_unit: Mapped["OrgUnit"] = relationship("OrgUnit", back_populates="invites")
     invited_user: Mapped["User"] = relationship(

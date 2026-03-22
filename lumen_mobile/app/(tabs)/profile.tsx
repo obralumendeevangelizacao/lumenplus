@@ -14,7 +14,8 @@ import {
   RefreshControl, Image, Switch, Platform, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
+import type { IoniconsName } from '@/types/icons';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import { profileService } from '@/services';
@@ -118,43 +119,23 @@ export default function ProfileScreen() {
   // Modal principal de edição
   const [editVisible, setEditVisible] = useState(false);
 
-  // Campos — Dados Pessoais
-  const [editName, setEditName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editBirthDate, setEditBirthDate] = useState('');
-  const [editUF, setEditUF] = useState('');
-  const [editCity, setEditCity] = useState('');
-  const [editInstagram, setEditInstagram] = useState('');
-
-  // Campos — Comunidade
-  const [editLifeState, setEditLifeState] = useState<CatalogItem | null>(null);
-  const [editMarital, setEditMarital] = useState<CatalogItem | null>(null);
-  const [editVocational, setEditVocational] = useState<CatalogItem | null>(null);
-  const [editDespertar, setEditDespertar] = useState('');
-  const [editHasAccomp, setEditHasAccomp] = useState(false);
-  const [editAccompName, setEditAccompName] = useState('');
-  const [editInterestedMinistry, setEditInterestedMinistry] = useState(false);
-  const [editMinistryNotes, setEditMinistryNotes] = useState('');
-
-  // Campos — Retiros e Eventos
-  const [editAccommodation, setEditAccommodation] = useState('');
-  const [editDietaryRestriction, setEditDietaryRestriction] = useState(false);
-  const [editDietaryNotes, setEditDietaryNotes] = useState('');
-  const [editHealthInsurance, setEditHealthInsurance] = useState(false);
-  const [editHealthInsuranceName, setEditHealthInsuranceName] = useState('');
-  const [editIsFromMission, setEditIsFromMission] = useState(false);
-  const [editMissionName, setEditMissionName] = useState('');
-
-  // Campos — Música
-  const [editPlaysInstrument, setEditPlaysInstrument] = useState(false);
-  const [editInstrumentNames, setEditInstrumentNames] = useState<string[]>([]);
-  const [editAvailableForGroup, setEditAvailableForGroup] = useState(false);
-  const [editMusicAvailability, setEditMusicAvailability] = useState<string[]>([]);
-
-  // Campos — Contato de Emergência
-  const [editEmergencyName, setEditEmergencyName] = useState('');
-  const [editEmergencyRelationship, setEditEmergencyRelationship] = useState('');
-  const [editEmergencyPhone, setEditEmergencyPhone] = useState('');
+  // Campos agrupados por seção
+  const [editPersonal, setEditPersonal] = useState({ name: '', phone: '', birthDate: '', uf: '', city: '', instagram: '' });
+  const [editCommunity, setEditCommunity] = useState({
+    lifeState: null as CatalogItem | null, marital: null as CatalogItem | null,
+    vocational: null as CatalogItem | null, despertar: '', hasAccomp: false,
+    accompName: '', interestedMinistry: false, ministryNotes: '',
+    isFromMission: false, missionName: '',
+  });
+  const [editExtra, setEditExtra] = useState({
+    accommodation: '', dietaryRestriction: false, dietaryNotes: '',
+    healthInsurance: false, healthInsuranceName: '',
+  });
+  const [editMusic, setEditMusic] = useState({
+    playsInstrument: false, instrumentNames: [] as string[],
+    availableForGroup: false, musicAvailability: [] as string[],
+  });
+  const [editEmergency, setEditEmergency] = useState({ name: '', relationship: '', phone: '' });
 
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
@@ -206,35 +187,45 @@ export default function ProfileScreen() {
   // ---------------------------------------------------------------------------
   const openEditModal = () => {
     if (!profile) return;
-    setEditName(profile.full_name ?? '');
-    setEditPhone(e164ToDisplay(profile.phone_e164));
-    setEditBirthDate(isoToDisplay(profile.birth_date));
-    setEditUF(profile.state ?? '');
-    setEditCity(profile.city ?? '');
-    setEditInstagram(profile.instagram ?? '');
-    setEditLifeState(lifeStates.find(i => i.id === profile.life_state_item_id) ?? null);
-    setEditMarital(maritalStatuses.find(i => i.id === profile.marital_status_item_id) ?? null);
-    setEditVocational(vocationalRealities.find(i => i.id === profile.vocational_reality_item_id) ?? null);
-    setEditDespertar(profile.despertar_encounter ?? '');
-    setEditHasAccomp(profile.has_vocational_accompaniment ?? false);
-    setEditAccompName(profile.vocational_accompanist_name ?? '');
-    setEditInterestedMinistry(profile.interested_in_ministry ?? false);
-    setEditMinistryNotes(profile.ministry_interest_notes ?? '');
-    setEditAccommodation(profile.accommodation_preference ?? '');
-    setEditDietaryRestriction(profile.dietary_restriction ?? false);
-    setEditDietaryNotes(profile.dietary_restriction_notes ?? '');
-    setEditHealthInsurance(profile.health_insurance ?? false);
-    setEditHealthInsuranceName(profile.health_insurance_name ?? '');
-    setEditIsFromMission(profile.is_from_mission ?? false);
-    setEditMissionName(profile.mission_name ?? '');
-    setEditPlaysInstrument(profile.plays_instrument ?? false);
-    setEditInstrumentNames(profile.instrument_names ?? []);
-    setEditAvailableForGroup(profile.available_for_group ?? false);
-    setEditMusicAvailability(profile.music_availability ?? []);
+    setEditPersonal({
+      name: profile.full_name ?? '',
+      phone: e164ToDisplay(profile.phone_e164),
+      birthDate: isoToDisplay(profile.birth_date),
+      uf: profile.state ?? '',
+      city: profile.city ?? '',
+      instagram: profile.instagram ?? '',
+    });
+    setEditCommunity({
+      lifeState: lifeStates.find(i => i.id === profile.life_state_item_id) ?? null,
+      marital: maritalStatuses.find(i => i.id === profile.marital_status_item_id) ?? null,
+      vocational: vocationalRealities.find(i => i.id === profile.vocational_reality_item_id) ?? null,
+      despertar: profile.despertar_encounter ?? '',
+      hasAccomp: profile.has_vocational_accompaniment ?? false,
+      accompName: profile.vocational_accompanist_name ?? '',
+      interestedMinistry: profile.interested_in_ministry ?? false,
+      ministryNotes: profile.ministry_interest_notes ?? '',
+      isFromMission: profile.is_from_mission ?? false,
+      missionName: profile.mission_name ?? '',
+    });
+    setEditExtra({
+      accommodation: profile.accommodation_preference ?? '',
+      dietaryRestriction: profile.dietary_restriction ?? false,
+      dietaryNotes: profile.dietary_restriction_notes ?? '',
+      healthInsurance: profile.health_insurance ?? false,
+      healthInsuranceName: profile.health_insurance_name ?? '',
+    });
+    setEditMusic({
+      playsInstrument: profile.plays_instrument ?? false,
+      instrumentNames: profile.instrument_names ?? [],
+      availableForGroup: profile.available_for_group ?? false,
+      musicAvailability: profile.music_availability ?? [],
+    });
     const ec = profile.emergency_contacts?.[0];
-    setEditEmergencyName(ec?.name ?? '');
-    setEditEmergencyRelationship(ec?.relationship ?? '');
-    setEditEmergencyPhone(ec ? e164ToDisplay(ec.phone_e164) : '');
+    setEditEmergency({
+      name: ec?.name ?? '',
+      relationship: ec?.relationship ?? '',
+      phone: ec ? e164ToDisplay(ec.phone_e164) : '',
+    });
     setEditErrors({});
     setSaveError('');
     setEditVisible(true);
@@ -252,14 +243,14 @@ export default function ProfileScreen() {
   // ---------------------------------------------------------------------------
   const validateEdit = (): boolean => {
     const e: Record<string, string> = {};
-    if (editName.trim().length < 2) e.name = 'Nome obrigatório (mín. 2 caracteres)';
-    if (editPhone.replace(/\D/g, '').length < 10) e.phone = 'Telefone inválido';
-    const parts = editBirthDate.split('/');
+    if (editPersonal.name.trim().length < 2) e.name = 'Nome obrigatório (mín. 2 caracteres)';
+    if (editPersonal.phone.replace(/\D/g, '').length < 10) e.phone = 'Telefone inválido';
+    const parts = editPersonal.birthDate.split('/');
     if (parts.length !== 3 || (parts[2] ?? '').length !== 4) e.birthDate = 'Data inválida (DD/MM/AAAA)';
-    if (!editUF) e.uf = 'Selecione o estado';
-    if (editCity.trim().length < 2) e.city = 'Cidade obrigatória';
-    if (editHasAccomp && !editAccompName.trim()) e.accompName = 'Informe o nome do acompanhador';
-    if (editInterestedMinistry && !editMinistryNotes.trim()) e.ministryNotes = 'Descreva o interesse';
+    if (!editPersonal.uf) e.uf = 'Selecione o estado';
+    if (editPersonal.city.trim().length < 2) e.city = 'Cidade obrigatória';
+    if (editCommunity.hasAccomp && !editCommunity.accompName.trim()) e.accompName = 'Informe o nome do acompanhador';
+    if (editCommunity.interestedMinistry && !editCommunity.ministryNotes.trim()) e.ministryNotes = 'Descreva o interesse';
     setEditErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -269,43 +260,43 @@ export default function ProfileScreen() {
     setSaving(true);
     setSaveError('');
     try {
-      const [dd, mm, yyyy] = editBirthDate.split('/');
-      const phoneDigits = editPhone.replace(/\D/g, '');
+      const [dd, mm, yyyy] = editPersonal.birthDate.split('/');
+      const phoneDigits = editPersonal.phone.replace(/\D/g, '');
       await profileService.updateProfile({
-        full_name: editName.trim(),
+        full_name: editPersonal.name.trim(),
         birth_date: `${yyyy}-${mm}-${dd}`,
         phone_e164: `+55${phoneDigits}`,
-        city: editCity.trim(),
-        state: editUF,
+        city: editPersonal.city.trim(),
+        state: editPersonal.uf,
         photo_url: profile?.photo_url ?? null,
-        life_state_item_id: editLifeState?.id ?? null,
-        marital_status_item_id: editMarital?.id ?? null,
-        vocational_reality_item_id: editVocational?.id ?? null,
-        has_vocational_accompaniment: editHasAccomp,
-        vocational_accompanist_name: editHasAccomp ? editAccompName.trim() : null,
-        interested_in_ministry: editInterestedMinistry,
-        ministry_interest_notes: editInterestedMinistry ? editMinistryNotes.trim() : null,
-        instagram: editInstagram.trim() || null,
-        dietary_restriction: editDietaryRestriction,
-        dietary_restriction_notes: editDietaryRestriction ? editDietaryNotes.trim() || null : null,
-        health_insurance: editHealthInsurance,
-        health_insurance_name: editHealthInsurance ? editHealthInsuranceName.trim() || null : null,
-        accommodation_preference: editAccommodation || null,
-        is_from_mission: editIsFromMission,
-        mission_name: editIsFromMission ? editMissionName.trim() || null : null,
-        despertar_encounter: editDespertar || null,
-        plays_instrument: editPlaysInstrument,
-        instrument_names: editPlaysInstrument ? editInstrumentNames : null,
-        available_for_group: editPlaysInstrument ? editAvailableForGroup : null,
-        music_availability: editPlaysInstrument && editAvailableForGroup ? editMusicAvailability : null,
+        life_state_item_id: editCommunity.lifeState?.id ?? null,
+        marital_status_item_id: editCommunity.marital?.id ?? null,
+        vocational_reality_item_id: editCommunity.vocational?.id ?? null,
+        has_vocational_accompaniment: editCommunity.hasAccomp,
+        vocational_accompanist_name: editCommunity.hasAccomp ? editCommunity.accompName.trim() : null,
+        interested_in_ministry: editCommunity.interestedMinistry,
+        ministry_interest_notes: editCommunity.interestedMinistry ? editCommunity.ministryNotes.trim() : null,
+        instagram: editPersonal.instagram.trim() || null,
+        dietary_restriction: editExtra.dietaryRestriction,
+        dietary_restriction_notes: editExtra.dietaryRestriction ? editExtra.dietaryNotes.trim() || null : null,
+        health_insurance: editExtra.healthInsurance,
+        health_insurance_name: editExtra.healthInsurance ? editExtra.healthInsuranceName.trim() || null : null,
+        accommodation_preference: editExtra.accommodation || null,
+        is_from_mission: editCommunity.isFromMission,
+        mission_name: editCommunity.isFromMission ? editCommunity.missionName.trim() || null : null,
+        despertar_encounter: editCommunity.despertar || null,
+        plays_instrument: editMusic.playsInstrument,
+        instrument_names: editMusic.playsInstrument ? editMusic.instrumentNames : null,
+        available_for_group: editMusic.playsInstrument ? editMusic.availableForGroup : null,
+        music_availability: editMusic.playsInstrument && editMusic.availableForGroup ? editMusic.musicAvailability : null,
       });
 
       // Salva contato de emergência se nome preenchido
-      if (editEmergencyName.trim()) {
+      if (editEmergency.name.trim()) {
         await profileService.addEmergencyContact({
-          name: editEmergencyName.trim(),
-          phone_e164: `+55${editEmergencyPhone.replace(/\D/g, '')}`,
-          relationship: editEmergencyRelationship.trim() || 'Não informado',
+          name: editEmergency.name.trim(),
+          phone_e164: `+55${editEmergency.phone.replace(/\D/g, '')}`,
+          relationship: editEmergency.relationship.trim() || 'Não informado',
         });
       }
 
@@ -500,27 +491,27 @@ export default function ProfileScreen() {
 
             <Text style={styles.editLabel}>Nome completo *</Text>
             <TextInput style={[styles.editInput, editErrors.name ? styles.editInputError : null]}
-              value={editName} onChangeText={t => { setEditName(t); setEditErrors(p => ({ ...p, name: '' })); }}
+              value={editPersonal.name} onChangeText={t => { setEditPersonal(p => ({ ...p, name: t })); setEditErrors(p => ({ ...p, name: '' })); }}
               placeholder="Nome completo" autoCapitalize="words" />
             {editErrors.name ? <Text style={styles.editError}>{editErrors.name}</Text> : null}
 
             <Text style={styles.editLabel}>Telefone (WhatsApp) *</Text>
             <TextInput style={[styles.editInput, editErrors.phone ? styles.editInputError : null]}
-              value={editPhone} onChangeText={t => { setEditPhone(formatPhone(t)); setEditErrors(p => ({ ...p, phone: '' })); }}
+              value={editPersonal.phone} onChangeText={t => { setEditPersonal(p => ({ ...p, phone: formatPhone(t) })); setEditErrors(p => ({ ...p, phone: '' })); }}
               placeholder="(11) 99999-9999" keyboardType="phone-pad" />
             {editErrors.phone ? <Text style={styles.editError}>{editErrors.phone}</Text> : null}
 
             <Text style={styles.editLabel}>Data de nascimento *</Text>
             <TextInput style={[styles.editInput, editErrors.birthDate ? styles.editInputError : null]}
-              value={editBirthDate} onChangeText={t => { setEditBirthDate(formatDate(t)); setEditErrors(p => ({ ...p, birthDate: '' })); }}
+              value={editPersonal.birthDate} onChangeText={t => { setEditPersonal(p => ({ ...p, birthDate: formatDate(t) })); setEditErrors(p => ({ ...p, birthDate: '' })); }}
               placeholder="DD/MM/AAAA" keyboardType="numeric" />
             {editErrors.birthDate ? <Text style={styles.editError}>{editErrors.birthDate}</Text> : null}
 
             <Text style={styles.editLabel}>Estado (UF) *</Text>
             <TouchableOpacity style={[styles.editSelector, editErrors.uf ? styles.editInputError : null]}
               onPress={() => setUfModalVisible(true)}>
-              <Text style={editUF ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {editUF || 'Selecione o estado'}
+              <Text style={editPersonal.uf ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {editPersonal.uf || 'Selecione o estado'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
@@ -528,12 +519,13 @@ export default function ProfileScreen() {
 
             <Text style={styles.editLabel}>Cidade *</Text>
             <TextInput style={[styles.editInput, editErrors.city ? styles.editInputError : null]}
-              value={editCity} onChangeText={t => { setEditCity(t); setEditErrors(p => ({ ...p, city: '' })); }}
+              value={editPersonal.city} onChangeText={t => { setEditPersonal(p => ({ ...p, city: t })); setEditErrors(p => ({ ...p, city: '' })); }}
               placeholder="Sua cidade" autoCapitalize="words" />
             {editErrors.city ? <Text style={styles.editError}>{editErrors.city}</Text> : null}
 
             <Text style={styles.editLabel}>Instagram</Text>
-            <TextInput style={styles.editInput} value={editInstagram} onChangeText={setEditInstagram}
+            <TextInput style={styles.editInput} value={editPersonal.instagram}
+              onChangeText={t => setEditPersonal(p => ({ ...p, instagram: t }))}
               placeholder="@usuario" autoCapitalize="none" />
 
             {/* ─ Informações da Comunidade ─ */}
@@ -541,51 +533,51 @@ export default function ProfileScreen() {
 
             <Text style={styles.editLabel}>Estado de Vida</Text>
             <TouchableOpacity style={styles.editSelector}
-              onPress={() => openCatalogModal('Estado de Vida', lifeStates, item => { setEditLifeState(item); setCatalogModalVisible(false); })}>
-              <Text style={editLifeState ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {editLifeState?.label || 'Selecionar'}
+              onPress={() => openCatalogModal('Estado de Vida', lifeStates, item => { setEditCommunity(p => ({ ...p, lifeState: item })); setCatalogModalVisible(false); })}>
+              <Text style={editCommunity.lifeState ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {editCommunity.lifeState?.label || 'Selecionar'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
 
             <Text style={styles.editLabel}>Estado Civil</Text>
             <TouchableOpacity style={styles.editSelector}
-              onPress={() => openCatalogModal('Estado Civil', maritalStatuses, item => { setEditMarital(item); setCatalogModalVisible(false); })}>
-              <Text style={editMarital ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {editMarital?.label || 'Selecionar'}
+              onPress={() => openCatalogModal('Estado Civil', maritalStatuses, item => { setEditCommunity(p => ({ ...p, marital: item })); setCatalogModalVisible(false); })}>
+              <Text style={editCommunity.marital ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {editCommunity.marital?.label || 'Selecionar'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
 
             <Text style={styles.editLabel}>Realidade Vocacional</Text>
             <TouchableOpacity style={styles.editSelector}
-              onPress={() => openCatalogModal('Realidade Vocacional', vocationalRealities, item => { setEditVocational(item); setCatalogModalVisible(false); })}>
-              <Text style={editVocational ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {editVocational?.label || 'Selecionar'}
+              onPress={() => openCatalogModal('Realidade Vocacional', vocationalRealities, item => { setEditCommunity(p => ({ ...p, vocational: item })); setCatalogModalVisible(false); })}>
+              <Text style={editCommunity.vocational ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {editCommunity.vocational?.label || 'Selecionar'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
 
             <Text style={styles.editLabel}>Encontro Despertar</Text>
             <TouchableOpacity style={styles.editSelector} onPress={() => setDespertarModalVisible(true)}>
-              <Text style={editDespertar ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {editDespertar || 'Selecionar encontro'}
+              <Text style={editCommunity.despertar ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {editCommunity.despertar || 'Selecionar encontro'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>É de alguma missão?</Text>
-              <Switch value={editIsFromMission}
-                onValueChange={v => { setEditIsFromMission(v); if (!v) setEditMissionName(''); }}
+              <Switch value={editCommunity.isFromMission}
+                onValueChange={v => setEditCommunity(p => ({ ...p, isFromMission: v, missionName: v ? p.missionName : '' }))}
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editIsFromMission ? PRIMARY : '#9ca3af'} />
+                thumbColor={editCommunity.isFromMission ? PRIMARY : '#9ca3af'} />
             </View>
-            {editIsFromMission && (
+            {editCommunity.isFromMission && (
               <>
                 <Text style={styles.editLabel}>Qual missão?</Text>
-                <TextInput style={styles.editInput} value={editMissionName}
-                  onChangeText={setEditMissionName} placeholder="Nome da missão" />
+                <TextInput style={styles.editInput} value={editCommunity.missionName}
+                  onChangeText={t => setEditCommunity(p => ({ ...p, missionName: t }))} placeholder="Nome da missão" />
               </>
             )}
 
@@ -594,17 +586,17 @@ export default function ProfileScreen() {
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Possui acompanhamento vocacional?</Text>
-              <Switch value={editHasAccomp}
-                onValueChange={v => { setEditHasAccomp(v); if (!v) setEditErrors(p => ({ ...p, accompName: '' })); }}
+              <Switch value={editCommunity.hasAccomp}
+                onValueChange={v => { setEditCommunity(p => ({ ...p, hasAccomp: v })); if (!v) setEditErrors(p => ({ ...p, accompName: '' })); }}
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editHasAccomp ? PRIMARY : '#9ca3af'} />
+                thumbColor={editCommunity.hasAccomp ? PRIMARY : '#9ca3af'} />
             </View>
-            {editHasAccomp && (
+            {editCommunity.hasAccomp && (
               <>
                 <Text style={styles.editLabel}>Nome do acompanhador *</Text>
                 <TextInput style={[styles.editInput, editErrors.accompName ? styles.editInputError : null]}
-                  value={editAccompName}
-                  onChangeText={t => { setEditAccompName(t); setEditErrors(p => ({ ...p, accompName: '' })); }}
+                  value={editCommunity.accompName}
+                  onChangeText={t => { setEditCommunity(p => ({ ...p, accompName: t })); setEditErrors(p => ({ ...p, accompName: '' })); }}
                   placeholder="Nome completo do acompanhador" autoCapitalize="words" />
                 {editErrors.accompName ? <Text style={styles.editError}>{editErrors.accompName}</Text> : null}
               </>
@@ -615,17 +607,17 @@ export default function ProfileScreen() {
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Tem interesse em ministério?</Text>
-              <Switch value={editInterestedMinistry}
-                onValueChange={v => { setEditInterestedMinistry(v); if (!v) setEditErrors(p => ({ ...p, ministryNotes: '' })); }}
+              <Switch value={editCommunity.interestedMinistry}
+                onValueChange={v => { setEditCommunity(p => ({ ...p, interestedMinistry: v })); if (!v) setEditErrors(p => ({ ...p, ministryNotes: '' })); }}
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editInterestedMinistry ? PRIMARY : '#9ca3af'} />
+                thumbColor={editCommunity.interestedMinistry ? PRIMARY : '#9ca3af'} />
             </View>
-            {editInterestedMinistry && (
+            {editCommunity.interestedMinistry && (
               <>
                 <Text style={styles.editLabel}>Descreva o interesse *</Text>
                 <TextInput style={[styles.editInput, styles.editInputMultiline, editErrors.ministryNotes ? styles.editInputError : null]}
-                  value={editMinistryNotes}
-                  onChangeText={t => { setEditMinistryNotes(t); setEditErrors(p => ({ ...p, ministryNotes: '' })); }}
+                  value={editCommunity.ministryNotes}
+                  onChangeText={t => { setEditCommunity(p => ({ ...p, ministryNotes: t })); setEditErrors(p => ({ ...p, ministryNotes: '' })); }}
                   placeholder="Em qual(is) ministério(s) tem interesse e por quê..."
                   multiline numberOfLines={4} />
                 {editErrors.ministryNotes ? <Text style={styles.editError}>{editErrors.ministryNotes}</Text> : null}
@@ -637,32 +629,35 @@ export default function ProfileScreen() {
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Toca instrumento ou canta?</Text>
-              <Switch value={editPlaysInstrument}
-                onValueChange={v => {
-                  setEditPlaysInstrument(v);
-                  if (!v) {
-                    setEditInstrumentNames([]);
-                    setEditAvailableForGroup(false);
-                    setEditMusicAvailability([]);
-                  }
-                }}
+              <Switch value={editMusic.playsInstrument}
+                onValueChange={v => setEditMusic(p => ({
+                  ...p,
+                  playsInstrument: v,
+                  instrumentNames: v ? p.instrumentNames : [],
+                  availableForGroup: v ? p.availableForGroup : false,
+                  musicAvailability: v ? p.musicAvailability : [],
+                }))
+                }
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editPlaysInstrument ? PRIMARY : '#9ca3af'} />
+                thumbColor={editMusic.playsInstrument ? PRIMARY : '#9ca3af'} />
             </View>
 
-            {editPlaysInstrument && (
+            {editMusic.playsInstrument && (
               <>
                 <Text style={styles.editLabel}>Qual(is) instrumento(s)?</Text>
                 <View style={styles.chipsContainer}>
                   {INSTRUMENTS.map(inst => {
-                    const selected = editInstrumentNames.includes(inst);
+                    const selected = editMusic.instrumentNames.includes(inst);
                     return (
                       <TouchableOpacity
                         key={inst}
                         style={[styles.chip, selected && styles.chipSelected]}
-                        onPress={() => setEditInstrumentNames(prev =>
-                          selected ? prev.filter(i => i !== inst) : [...prev, inst]
-                        )}
+                        onPress={() => setEditMusic(p => ({
+                          ...p,
+                          instrumentNames: selected
+                            ? p.instrumentNames.filter(i => i !== inst)
+                            : [...p.instrumentNames, inst],
+                        }))}
                       >
                         <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
                           {inst}
@@ -674,16 +669,15 @@ export default function ProfileScreen() {
 
                 <View style={[styles.toggleRow, { marginTop: 12 }]}>
                   <Text style={styles.toggleLabel}>Disponível para servir em grupo?</Text>
-                  <Switch value={editAvailableForGroup}
-                    onValueChange={v => {
-                      setEditAvailableForGroup(v);
-                      if (!v) setEditMusicAvailability([]);
-                    }}
+                  <Switch value={editMusic.availableForGroup}
+                    onValueChange={v => setEditMusic(p => ({
+                      ...p, availableForGroup: v, musicAvailability: v ? p.musicAvailability : [],
+                    }))}
                     trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                    thumbColor={editAvailableForGroup ? PRIMARY : '#9ca3af'} />
+                    thumbColor={editMusic.availableForGroup ? PRIMARY : '#9ca3af'} />
                 </View>
 
-                {editAvailableForGroup && (
+                {editMusic.availableForGroup && (
                   <>
                     <Text style={styles.editLabel}>Quais dias e turnos?</Text>
                     <View style={styles.availGrid}>
@@ -698,14 +692,17 @@ export default function ProfileScreen() {
                           <Text style={styles.availDayLabel}>{day}</Text>
                           {TURNS.map(turn => {
                             const key = availKey(day, turn);
-                            const checked = editMusicAvailability.includes(key);
+                            const checked = editMusic.musicAvailability.includes(key);
                             return (
                               <TouchableOpacity
                                 key={turn}
                                 style={[styles.availCell, checked && styles.availCellChecked]}
-                                onPress={() => setEditMusicAvailability(prev =>
-                                  checked ? prev.filter(k => k !== key) : [...prev, key]
-                                )}
+                                onPress={() => setEditMusic(p => ({
+                                  ...p,
+                                  musicAvailability: checked
+                                    ? p.musicAvailability.filter(k => k !== key)
+                                    : [...p.musicAvailability, key],
+                                }))}
                               >
                                 {checked && <Ionicons name="checkmark" size={14} color={WHITE} />}
                               </TouchableOpacity>
@@ -724,39 +721,39 @@ export default function ProfileScreen() {
 
             <Text style={styles.editLabel}>Preferência de Acomodação</Text>
             <TouchableOpacity style={styles.editSelector} onPress={() => setAccommodationModalVisible(true)}>
-              <Text style={editAccommodation ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
-                {ACCOMMODATION_OPTIONS.find(o => o.value === editAccommodation)?.label || 'Selecionar'}
+              <Text style={editExtra.accommodation ? styles.editSelectorValue : styles.editSelectorPlaceholder}>
+                {ACCOMMODATION_OPTIONS.find(o => o.value === editExtra.accommodation)?.label || 'Selecionar'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={GRAY} />
             </TouchableOpacity>
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Restrição alimentar?</Text>
-              <Switch value={editDietaryRestriction}
-                onValueChange={v => { setEditDietaryRestriction(v); if (!v) setEditDietaryNotes(''); }}
+              <Switch value={editExtra.dietaryRestriction}
+                onValueChange={v => setEditExtra(p => ({ ...p, dietaryRestriction: v, dietaryNotes: v ? p.dietaryNotes : '' }))}
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editDietaryRestriction ? PRIMARY : '#9ca3af'} />
+                thumbColor={editExtra.dietaryRestriction ? PRIMARY : '#9ca3af'} />
             </View>
-            {editDietaryRestriction && (
+            {editExtra.dietaryRestriction && (
               <>
                 <Text style={styles.editLabel}>Quais restrições?</Text>
-                <TextInput style={styles.editInput} value={editDietaryNotes}
-                  onChangeText={setEditDietaryNotes} placeholder="Ex: Vegano, Sem glúten..." />
+                <TextInput style={styles.editInput} value={editExtra.dietaryNotes}
+                  onChangeText={t => setEditExtra(p => ({ ...p, dietaryNotes: t }))} placeholder="Ex: Vegano, Sem glúten..." />
               </>
             )}
 
             <View style={styles.toggleRow}>
               <Text style={styles.toggleLabel}>Possui plano de saúde?</Text>
-              <Switch value={editHealthInsurance}
-                onValueChange={v => { setEditHealthInsurance(v); if (!v) setEditHealthInsuranceName(''); }}
+              <Switch value={editExtra.healthInsurance}
+                onValueChange={v => setEditExtra(p => ({ ...p, healthInsurance: v, healthInsuranceName: v ? p.healthInsuranceName : '' }))}
                 trackColor={{ false: '#d1d5db', true: `${PRIMARY}80` }}
-                thumbColor={editHealthInsurance ? PRIMARY : '#9ca3af'} />
+                thumbColor={editExtra.healthInsurance ? PRIMARY : '#9ca3af'} />
             </View>
-            {editHealthInsurance && (
+            {editExtra.healthInsurance && (
               <>
                 <Text style={styles.editLabel}>Qual plano?</Text>
-                <TextInput style={styles.editInput} value={editHealthInsuranceName}
-                  onChangeText={setEditHealthInsuranceName} placeholder="Ex: Unimed, Bradesco Saúde..." />
+                <TextInput style={styles.editInput} value={editExtra.healthInsuranceName}
+                  onChangeText={t => setEditExtra(p => ({ ...p, healthInsuranceName: t }))} placeholder="Ex: Unimed, Bradesco Saúde..." />
               </>
             )}
 
@@ -764,16 +761,16 @@ export default function ProfileScreen() {
             <Text style={[styles.editSection, { marginTop: 8 }]}>Contato de Emergência</Text>
 
             <Text style={styles.editLabel}>Nome</Text>
-            <TextInput style={styles.editInput} value={editEmergencyName}
-              onChangeText={setEditEmergencyName} placeholder="Nome do contato" autoCapitalize="words" />
+            <TextInput style={styles.editInput} value={editEmergency.name}
+              onChangeText={t => setEditEmergency(p => ({ ...p, name: t }))} placeholder="Nome do contato" autoCapitalize="words" />
 
             <Text style={styles.editLabel}>Parentesco</Text>
-            <TextInput style={styles.editInput} value={editEmergencyRelationship}
-              onChangeText={setEditEmergencyRelationship} placeholder="Ex: Mãe, Pai, Cônjuge" autoCapitalize="words" />
+            <TextInput style={styles.editInput} value={editEmergency.relationship}
+              onChangeText={t => setEditEmergency(p => ({ ...p, relationship: t }))} placeholder="Ex: Mãe, Pai, Cônjuge" autoCapitalize="words" />
 
             <Text style={styles.editLabel}>Telefone</Text>
-            <TextInput style={styles.editInput} value={editEmergencyPhone}
-              onChangeText={t => setEditEmergencyPhone(formatPhone(t))}
+            <TextInput style={styles.editInput} value={editEmergency.phone}
+              onChangeText={t => setEditEmergency(p => ({ ...p, phone: formatPhone(t) }))}
               placeholder="(11) 99999-9999" keyboardType="phone-pad" />
 
             {saveError ? (
@@ -805,10 +802,10 @@ export default function ProfileScreen() {
             </View>
             <FlatList data={BR_STATES} keyExtractor={item => item}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.subItem, editUF === item ? styles.subItemSelected : null]}
-                  onPress={() => { setEditUF(item); setEditErrors(p => ({ ...p, uf: '' })); setUfModalVisible(false); }}>
-                  <Text style={[styles.subItemText, editUF === item ? styles.subItemTextSelected : null]}>{item}</Text>
-                  {editUF === item && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
+                <TouchableOpacity style={[styles.subItem, editPersonal.uf === item ? styles.subItemSelected : null]}
+                  onPress={() => { setEditPersonal(p => ({ ...p, uf: item })); setEditErrors(p => ({ ...p, uf: '' })); setUfModalVisible(false); }}>
+                  <Text style={[styles.subItemText, editPersonal.uf === item ? styles.subItemTextSelected : null]}>{item}</Text>
+                  {editPersonal.uf === item && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
                 </TouchableOpacity>
               )}
             />
@@ -829,9 +826,9 @@ export default function ProfileScreen() {
             <FlatList data={catalogOptions} keyExtractor={item => item.id}
               renderItem={({ item }) => {
                 const isSelected =
-                  (catalogTitle === 'Estado de Vida' && editLifeState?.id === item.id) ||
-                  (catalogTitle === 'Estado Civil' && editMarital?.id === item.id) ||
-                  (catalogTitle === 'Realidade Vocacional' && editVocational?.id === item.id);
+                  (catalogTitle === 'Estado de Vida' && editCommunity.lifeState?.id === item.id) ||
+                  (catalogTitle === 'Estado Civil' && editCommunity.marital?.id === item.id) ||
+                  (catalogTitle === 'Realidade Vocacional' && editCommunity.vocational?.id === item.id);
                 return (
                   <TouchableOpacity style={[styles.subItem, isSelected ? styles.subItemSelected : null]}
                     onPress={() => catalogOnSelect(item)}>
@@ -857,10 +854,10 @@ export default function ProfileScreen() {
             </View>
             {ACCOMMODATION_OPTIONS.map(opt => (
               <TouchableOpacity key={opt.value}
-                style={[styles.subItem, editAccommodation === opt.value ? styles.subItemSelected : null]}
-                onPress={() => { setEditAccommodation(opt.value); setAccommodationModalVisible(false); }}>
-                <Text style={[styles.subItemText, editAccommodation === opt.value ? styles.subItemTextSelected : null]}>{opt.label}</Text>
-                {editAccommodation === opt.value && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
+                style={[styles.subItem, editExtra.accommodation === opt.value ? styles.subItemSelected : null]}
+                onPress={() => { setEditExtra(p => ({ ...p, accommodation: opt.value })); setAccommodationModalVisible(false); }}>
+                <Text style={[styles.subItemText, editExtra.accommodation === opt.value ? styles.subItemTextSelected : null]}>{opt.label}</Text>
+                {editExtra.accommodation === opt.value && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
               </TouchableOpacity>
             ))}
           </View>
@@ -879,10 +876,10 @@ export default function ProfileScreen() {
             </View>
             <FlatList data={DESPERTAR_ENCOUNTERS} keyExtractor={item => item}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.subItem, editDespertar === item ? styles.subItemSelected : null]}
-                  onPress={() => { setEditDespertar(item); setDespertarModalVisible(false); }}>
-                  <Text style={[styles.subItemText, editDespertar === item ? styles.subItemTextSelected : null]}>{item}</Text>
-                  {editDespertar === item && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
+                <TouchableOpacity style={[styles.subItem, editCommunity.despertar === item ? styles.subItemSelected : null]}
+                  onPress={() => { setEditCommunity(p => ({ ...p, despertar: item })); setDespertarModalVisible(false); }}>
+                  <Text style={[styles.subItemText, editCommunity.despertar === item ? styles.subItemTextSelected : null]}>{item}</Text>
+                  {editCommunity.despertar === item && <Ionicons name="checkmark" size={20} color={PRIMARY} />}
                 </TouchableOpacity>
               )}
             />
@@ -906,7 +903,7 @@ const InfoRow = memo(function InfoRow({ icon, label, value, last }: {
 }) {
   return (
     <View style={[styles.row, last ? styles.rowLast : null]}>
-      <Ionicons name={icon as any} size={20} color={GRAY} />
+      <Ionicons name={icon as IoniconsName} size={20} color={GRAY} />
       <View style={styles.rowContent}>
         <Text style={styles.rowLabel}>{label}</Text>
         <Text style={styles.rowValue}>{value || 'Não informado'}</Text>

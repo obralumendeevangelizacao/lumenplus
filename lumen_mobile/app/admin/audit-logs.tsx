@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { api } from '@/services/api';
 
 // ---------------------------------------------------------------------------
@@ -156,7 +157,7 @@ export default function AuditLogsScreen() {
         {/* Icon + action */}
         <View style={styles.cardHeader}>
           <View style={[styles.iconBadge, { backgroundColor: `${meta.color}18` }]}>
-            <Ionicons name={meta.icon as any} size={18} color={meta.color} />
+            <Ionicons name={meta.icon as IoniconsName} size={18} color={meta.color} />
           </View>
           <View style={styles.cardHeaderText}>
             <Text style={[styles.actionLabel, { color: meta.color }]}>{meta.label}</Text>

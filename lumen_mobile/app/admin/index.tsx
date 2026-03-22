@@ -5,8 +5,9 @@
  */
 
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { useAuthStore } from '@/stores';
 
 const colors = {
@@ -154,11 +155,11 @@ export default function AdminMenuScreen() {
               <TouchableOpacity
                 key={option.id}
                 style={styles.optionCard}
-                onPress={() => router.push(option.route as any)}
+                onPress={() => router.push(option.route as Href)}
                 activeOpacity={0.7}
               >
                 <View style={styles.optionIconContainer}>
-                  <Ionicons name={option.icon as any} size={24} color={colors.admin} />
+                  <Ionicons name={option.icon as IoniconsName} size={24} color={colors.admin} />
                 </View>
                 <View style={styles.optionContent}>
                   <Text style={styles.optionTitle}>{option.title}</Text>

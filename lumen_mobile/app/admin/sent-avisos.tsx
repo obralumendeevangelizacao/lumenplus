@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import api from '@/services/api';
 
 const colors = {
@@ -133,7 +134,7 @@ export default function SentAvisosScreen() {
         {/* Header: tipo + título + data/hora */}
         <View style={styles.cardHeader}>
           <View style={[styles.typeIconBadge, { backgroundColor: `${typeConfig.color}18` }]}>
-            <Ionicons name={typeConfig.icon as any} size={22} color={typeConfig.color} />
+            <Ionicons name={typeConfig.icon as IoniconsName} size={22} color={typeConfig.color} />
           </View>
           <View style={styles.headerInfo}>
             <Text style={styles.avisoTitle} numberOfLines={1}>{item.title}</Text>
@@ -165,7 +166,7 @@ export default function SentAvisosScreen() {
             </Text>
           </View>
           <View style={styles.detailRow}>
-            <Ionicons name={getDestinationIcon(item) as any} size={15} color={colors.admin} />
+            <Ionicons name={getDestinationIcon(item) as IoniconsName} size={15} color={colors.admin} />
             <Text style={styles.detailLabel}>Para</Text>
             <Text style={styles.detailValue} numberOfLines={2}>
               {getDestinationLabel(item)}

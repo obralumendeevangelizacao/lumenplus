@@ -14,8 +14,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { orgService } from '@/services';
 import type { Membership } from '@/types';
 
@@ -116,7 +117,7 @@ export default function CoordinatorScreen() {
         {/* Units */}
         {units.map((unit) => {
           const typeLabel = ORG_UNIT_TYPE_LABEL[unit.org_unit_type] ?? unit.org_unit_type;
-          const typeIcon = (ORG_UNIT_TYPE_ICON[unit.org_unit_type] ?? 'people') as any;
+          const typeIcon = (ORG_UNIT_TYPE_ICON[unit.org_unit_type] ?? 'people') as IoniconsName;
 
           const options: CoordOption[] = [];
 
@@ -143,7 +144,7 @@ export default function CoordinatorScreen() {
               title: 'Retiros',
               description: 'Crie e gerencie retiros e inscrições',
               icon: 'compass-outline',
-              onPress: () => router.push('/admin/retreats' as any),
+              onPress: () => router.push('/admin/retreats' as Href),
             });
           }
 
@@ -177,7 +178,7 @@ export default function CoordinatorScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.optionIconContainer}>
-                    <Ionicons name={opt.icon as any} size={24} color={colors.coord} />
+                    <Ionicons name={opt.icon as IoniconsName} size={24} color={colors.coord} />
                   </View>
                   <View style={styles.optionContent}>
                     <Text style={styles.optionTitle}>{opt.title}</Text>

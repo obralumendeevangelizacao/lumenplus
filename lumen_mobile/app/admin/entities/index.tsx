@@ -20,6 +20,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { IoniconsName } from '@/types/icons';
 import { orgService, orgAdminService } from '@/services';
 import api from '@/services/api';
 import type { Membership } from '@/types';
@@ -251,7 +252,7 @@ export default function EntitiesScreen() {
       <View key={unit.id} style={[styles.unitCard, { marginLeft: depth * 12 }]}>
         <View style={styles.unitHeader}>
           <View style={[styles.unitIconBox, { backgroundColor: colors.adminLight }]}>
-            <Ionicons name={icon as any} size={20} color={colors.admin} />
+            <Ionicons name={icon as IoniconsName} size={20} color={colors.admin} />
           </View>
           <View style={styles.unitInfo}>
             <Text style={styles.unitName}>{unit.name}</Text>

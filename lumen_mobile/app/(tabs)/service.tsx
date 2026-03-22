@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   GOZOSOS, LUMINOSOS, DOLOROSOS, GLORIOSOS,
@@ -77,12 +77,29 @@ function ExpandableCard(props: ExpandableCardProps) {
 }
 
 // =============================================================================
+// TIPOS
+// =============================================================================
+
+interface Reading { head: string; text: string }
+interface LiturgiaData {
+  color: string;
+  date: string;
+  entry_title: string;
+  readings: {
+    first_reading: Reading | null;
+    psalm: { response: string; content_psalm: string[] } | null;
+    second_reading: Reading | null;
+    gospel: Reading | null;
+  };
+}
+
+// =============================================================================
 // TELA PRINCIPAL
 // =============================================================================
 
 export default function OracoesScreen() {
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [liturgia, setLiturgia] = useState<any>(null);
+  const [liturgia, setLiturgia] = useState<LiturgiaData | null>(null);
   const [liturgiaLoading, setLiturgiaLoading] = useState(true);
   const [liturgiaError, setLiturgiaError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -304,7 +321,7 @@ export default function OracoesScreen() {
 
       <TouchableOpacity
         style={styles.escriturasCard}
-        onPress={() => router.push('/biblia' as any)}
+        onPress={() => router.push('/biblia' as Href)}
         activeOpacity={0.7}
       >
         <View style={styles.escriturasIconContainer}>
@@ -320,7 +337,7 @@ export default function OracoesScreen() {
       {/* ── CATECISMO ───────────────────────────────────────────────── */}
       <TouchableOpacity
         style={styles.catecismoCard}
-        onPress={() => router.push('/catecismo' as any)}
+        onPress={() => router.push('/catecismo' as Href)}
         activeOpacity={0.7}
       >
         <View style={styles.catecismoIconContainer}>
