@@ -1,26 +1,18 @@
 /**
  * Coordinator Layout
  * ==================
- * Layout para a área de coordenação.
  */
 
 import { Stack } from 'expo-router';
-
-const colors = {
-  coord: '#059669',
-  white: '#ffffff',
-};
+import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
 
 export default function CoordinatorLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.coord },
-        headerTintColor: colors.white,
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: 'Minha Coordenação' }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{
+        header: () => <BreadcrumbHeader items={[{ label: 'Minha Coordenação' }]} />,
+        headerShown: true,
+      }} />
     </Stack>
   );
 }

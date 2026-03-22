@@ -1,19 +1,28 @@
-import { Stack } from 'expo-router';
+/**
+ * Retreats Layout
+ * ===============
+ */
 
-const colors = { primary: '#1A859B', white: '#ffffff' };
+import { Stack } from 'expo-router';
+import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+
+const RETIROS: { label: string; href: '/retreats' } = { label: 'Retiros', href: '/retreats' };
 
 export default function RetreatsLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.primary },
-        headerTintColor: colors.white,
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen name="index"          options={{ title: 'Retiros' }} />
-      <Stack.Screen name="[id]"           options={{ title: 'Detalhes do Retiro' }} />
-      <Stack.Screen name="[id]/payment"   options={{ title: 'Enviar Comprovante' }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{
+        header: () => <BreadcrumbHeader items={[{ label: 'Retiros' }]} />,
+        headerShown: true,
+      }} />
+      <Stack.Screen name="[id]" options={{
+        header: () => <BreadcrumbHeader items={[RETIROS, { label: 'Detalhes' }]} />,
+        headerShown: true,
+      }} />
+      <Stack.Screen name="[id]/payment" options={{
+        header: () => <BreadcrumbHeader items={[RETIROS, { label: 'Comprovante' }]} />,
+        headerShown: true,
+      }} />
     </Stack>
   );
 }

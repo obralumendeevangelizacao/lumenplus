@@ -13,8 +13,9 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
 import {
   getParagrafo,
   getContexto,
@@ -74,22 +75,23 @@ export default function CatecismoReaderScreen() {
     <>
       <Stack.Screen
         options={{
-          title: `§${num}`,
-          headerRight: () => (
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                onPress={() => setFontSize(s => Math.max(12, s - 2))}
-                style={styles.headerBtn}
-              >
-                <Text style={styles.headerBtnTextSm}>A-</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setFontSize(s => Math.min(26, s + 2))}
-                style={styles.headerBtn}
-              >
-                <Text style={styles.headerBtnTextLg}>A+</Text>
-              </TouchableOpacity>
-            </View>
+          header: () => (
+            <BreadcrumbHeader
+              items={[
+                { label: 'Catecismo', href: '/catecismo' as Href },
+                { label: `§${num}` },
+              ]}
+              right={
+                <View style={styles.headerActions}>
+                  <TouchableOpacity onPress={() => setFontSize(s => Math.max(12, s - 2))} style={styles.headerBtn}>
+                    <Text style={styles.headerBtnTextSm}>A-</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setFontSize(s => Math.min(26, s + 2))} style={styles.headerBtn}>
+                    <Text style={styles.headerBtnTextLg}>A+</Text>
+                  </TouchableOpacity>
+                </View>
+              }
+            />
           ),
         }}
       />

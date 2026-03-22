@@ -1,25 +1,24 @@
 /**
  * Bíblia Layout
  * =============
- * Stack navigator para a área das Sagradas Escrituras.
  */
 
 import { Stack } from 'expo-router';
+import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
 
-const PRIMARY = '#1A859B';
-const WHITE = '#ffffff';
+const BIBLIA: { label: string; href: '/biblia' } = { label: 'Sagradas Escrituras', href: '/biblia' };
 
 export default function BibliaLayout() {
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: PRIMARY },
-        headerTintColor: WHITE,
-        headerTitleStyle: { fontWeight: '600' },
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: 'Sagradas Escrituras' }} />
-      <Stack.Screen name="reader" options={{ title: '' }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="index" options={{
+        header: () => <BreadcrumbHeader items={[{ label: 'Sagradas Escrituras' }]} />,
+        headerShown: true,
+      }} />
+      <Stack.Screen name="reader" options={{
+        header: () => <BreadcrumbHeader items={[BIBLIA, { label: 'Leitura' }]} />,
+        headerShown: true,
+      }} />
     </Stack>
   );
 }

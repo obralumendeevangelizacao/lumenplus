@@ -14,9 +14,10 @@ import {
   Modal,
   FlatList,
 } from 'react-native';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getLivro, getTodosOsLivros, type Livro } from '@/services/bible';
+import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
 
 const PRIMARY = '#1A859B';
 const WHITE = '#ffffff';
@@ -81,16 +82,23 @@ export default function ReaderScreen() {
     <>
       <Stack.Screen
         options={{
-          title: livro.nome,
-          headerRight: () => (
-            <View style={styles.headerActions}>
-              <TouchableOpacity onPress={() => setFontSize(s => Math.max(12, s - 2))} style={styles.headerBtn}>
-                <Text style={styles.headerBtnText}>A-</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setFontSize(s => Math.min(26, s + 2))} style={styles.headerBtn}>
-                <Text style={styles.headerBtnTextBig}>A+</Text>
-              </TouchableOpacity>
-            </View>
+          header: () => (
+            <BreadcrumbHeader
+              items={[
+                { label: 'Sagradas Escrituras', href: '/biblia' as Href },
+                { label: livro.nome },
+              ]}
+              right={
+                <View style={styles.headerActions}>
+                  <TouchableOpacity onPress={() => setFontSize(s => Math.max(12, s - 2))} style={styles.headerBtn}>
+                    <Text style={styles.headerBtnText}>A-</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setFontSize(s => Math.min(26, s + 2))} style={styles.headerBtn}>
+                    <Text style={styles.headerBtnTextBig}>A+</Text>
+                  </TouchableOpacity>
+                </View>
+              }
+            />
           ),
         }}
       />
