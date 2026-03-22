@@ -87,6 +87,11 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="admin" options={{ headerShown: false }} />
+            <Stack.Screen name="biblia" options={{ headerShown: false }} />
+            <Stack.Screen name="catecismo" options={{ headerShown: false }} />
+            <Stack.Screen name="retreats" options={{ headerShown: false }} />
+            <Stack.Screen name="coordinator" options={{ headerShown: false }} />
           </Stack>
         </SafeAreaProvider>
       </QueryClientProvider>
