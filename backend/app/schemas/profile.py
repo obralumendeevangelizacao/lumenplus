@@ -76,20 +76,12 @@ class ProfileUpdateRequest(BaseSchema):
     def uppercase_state(cls, v: str) -> str:
         return v.upper()
 
-    @model_validator(mode="after")
-    def validate_conditional_fields(self):
-        """Valida campos condicionais."""
-        # Se tem acompanhamento, deve informar quem
-        if self.has_vocational_accompaniment:
-            if not self.vocational_accompanist_user_id and not self.vocational_accompanist_name:
-                raise ValueError("Se faz acompanhamento vocacional, informe quem é o acompanhador")
-
-        # Se tem interesse em ministério, deve informar qual
-        if self.interested_in_ministry:
-            if not self.interested_ministry_id and not self.ministry_interest_notes:
-                raise ValueError("Se tem interesse em ministério, informe qual ou descreva")
-
-        return self
+    @field_validator("phone_e164")
+    @classmethod
+    def validate_phone(cls, v: str) -> str:
+        if not re.match(r"^\+[1-9]\d{10,14}$", v):
+            raise ValueError("Telefone inválido. Use o formato E.164: +5511999999999")
+        return v
 
 
 class EmergencyContactRequest(BaseSchema):

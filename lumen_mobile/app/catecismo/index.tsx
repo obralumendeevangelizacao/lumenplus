@@ -36,7 +36,7 @@ const PAGE_SIZE = 30;
 // =============================================================================
 
 function ModoLer() {
-  const todos = getTodosParagrafos();
+  const todos = useMemo(() => getTodosParagrafos(), []);
   const totalPaginas = Math.ceil(todos.length / PAGE_SIZE);
   const [pagina, setPagina] = useState(0);
   const listRef = useRef<FlatList>(null);

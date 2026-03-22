@@ -14,6 +14,7 @@ from typing import AsyncIterator
 import sentry_sdk
 import structlog
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -139,6 +140,16 @@ async def add_request_id(request: Request, call_next):
     return response
 
 
+# Validation error handler — 422 com formato limpo {field, message}
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    errors = []
+    for error in exc.errors():
+        field = ".".join(str(loc) for loc in error["loc"] if loc != "body")
+        errors.append({"field": field, "message": error["msg"]})
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
 # Exception handler
 # SEGURANÇA: loga apenas o tipo da exceção, NUNCA o conteúdo da mensagem,
 # pois ela pode conter CPF, RG, telefone ou outros dados sensíveis do request.
@@ -178,6 +189,7 @@ async def health():
 # Rotas — imports após setup do app (necessário para que o lifespan e middlewares
 # sejam registrados antes dos routers, comportamento esperado no FastAPI).  # noqa: E402
 from app.api.admin_retreat_routes import router as admin_retreat_router  # noqa: E402
+from app.api.admin_routes import router as admin_sensitive_router  # noqa: E402
 from app.api.inbox_routes import router as inbox_router  # noqa: E402
 from app.api.legal_routes import router as legal_router  # noqa: E402
 from app.api.profile_routes import router as profile_router  # noqa: E402
@@ -191,6 +203,7 @@ app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(org_router)
 app.include_router(admin_router)
+app.include_router(admin_sensitive_router)
 app.include_router(admin_retreat_router)
 app.include_router(retreat_router)
 app.include_router(inbox_router)

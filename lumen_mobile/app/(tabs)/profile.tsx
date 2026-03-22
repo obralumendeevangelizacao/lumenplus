@@ -7,7 +7,7 @@
  * encontro Despertar) e contato de emergência.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Modal, TextInput, ActivityIndicator, FlatList,
@@ -897,11 +897,11 @@ export default function ProfileScreen() {
 // SUB-COMPONENTES
 // =============================================================================
 
-function SectionTitle({ children }: { children: string }) {
+const SectionTitle = memo(function SectionTitle({ children }: { children: string }) {
   return <Text style={styles.sectionTitle}>{children}</Text>;
-}
+});
 
-function InfoRow({ icon, label, value, last }: {
+const InfoRow = memo(function InfoRow({ icon, label, value, last }: {
   icon: string; label: string; value?: string | null; last?: boolean;
 }) {
   return (
@@ -913,7 +913,7 @@ function InfoRow({ icon, label, value, last }: {
       </View>
     </View>
   );
-}
+});
 
 // =============================================================================
 // ESTILOS

@@ -7,6 +7,7 @@ Schemas vivem em app.schemas.profile — este módulo apenas orquestra.
 """
 
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -34,6 +35,29 @@ from app.schemas.profile import (
 )
 
 router = APIRouter(prefix="/profile", tags=["Profile"])
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# HELPERS INTERNOS — reutilizados em create e update
+# =============================================================================
+
+
+def _is_profile_complete(full_name, birth_date, phone_e164, city, state) -> bool:
+    """Retorna True se todos os campos obrigatórios do perfil estão preenchidos."""
+    return all([full_name, birth_date, phone_e164, city, state])
+
+
+def _parse_json_list(value: str | None) -> list[str] | None:
+    """Desserializa JSON string para lista, retornando None se inválido."""
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Falha ao desserializar campo JSON do perfil: %.50s", value)
+        return None
 
 
 # =============================================================================
@@ -321,14 +345,7 @@ def _apply_profile_fields(
         profile.phone_e164 = body.phone_e164
 
     # Determina status: COMPLETE se os campos obrigatórios estão preenchidos
-    required = [
-        profile.full_name,
-        profile.birth_date,
-        profile.phone_e164,
-        profile.city,
-        profile.state,
-    ]
-    if all(required):
+    if _is_profile_complete(profile.full_name, profile.birth_date, profile.phone_e164, profile.city, profile.state):
         profile.status = "COMPLETE"
         if not profile.completed_at:
             profile.completed_at = datetime.now(timezone.utc)
@@ -393,12 +410,8 @@ def _create_profile(
             if body.plays_instrument and body.available_for_group and body.music_availability
             else None
         ),
-        status="COMPLETE"
-        if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state])
-        else "INCOMPLETE",
-        completed_at=datetime.now(timezone.utc)
-        if all([body.full_name, body.birth_date, body.phone_e164, body.city, body.state])
-        else None,
+        status="COMPLETE" if _is_profile_complete(body.full_name, body.birth_date, body.phone_e164, body.city, body.state) else "INCOMPLETE",
+        completed_at=datetime.now(timezone.utc) if _is_profile_complete(body.full_name, body.birth_date, body.phone_e164, body.city, body.state) else None,
     )
 
 
@@ -462,9 +475,9 @@ def _build_profile_response(profile: UserProfile, db: DBSession) -> ProfileWithL
         mission_name=profile.mission_name,
         despertar_encounter=profile.despertar_encounter,
         plays_instrument=profile.plays_instrument,
-        instrument_names=json.loads(profile.instrument_names) if profile.instrument_names else None,
+        instrument_names=_parse_json_list(profile.instrument_names),
         available_for_group=profile.available_for_group,
-        music_availability=json.loads(profile.music_availability) if profile.music_availability else None,
+        music_availability=_parse_json_list(profile.music_availability),
         emergency_contacts=emergency_contacts,
         status=profile.status,
         completed_at=profile.completed_at,
