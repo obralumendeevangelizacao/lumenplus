@@ -1124,3 +1124,215 @@ class RetreatCoordinator(Base):
     retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="coordinators")
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
     granted_by: Mapped["User | None"] = relationship("User", foreign_keys=[granted_by_user_id])
+
+
+# === LIFE PLAN MODULE ===
+
+
+class LifeCycleStatus(enum.Enum):
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    ARCHIVED = "ARCHIVED"
+
+
+class LifePlanCycle(Base):
+    """
+    Ciclo do Projeto de Vida.
+    Apenas 1 ciclo ACTIVE por usuário (enforçado via partial unique index).
+    Dados sensíveis — não expor em logs ou dashboards admin.
+    """
+
+    __tablename__ = "life_plan_cycles"
+    __table_args__ = (
+        Index("idx_life_plan_cycles_user_id", "user_id"),
+        Index("idx_life_plan_cycles_status", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="DRAFT")
+    realidade_vocacional: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    wizard_progress: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    ended_at: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    diagnoses: Mapped[list["LifePlanDiagnosis"]] = relationship(
+        "LifePlanDiagnosis", back_populates="cycle", cascade="all, delete-orphan"
+    )
+    core: Mapped["LifePlanCore | None"] = relationship(
+        "LifePlanCore", back_populates="cycle", uselist=False, cascade="all, delete-orphan"
+    )
+    goals: Mapped[list["LifePlanGoal"]] = relationship(
+        "LifePlanGoal",
+        back_populates="cycle",
+        cascade="all, delete-orphan",
+        order_by="LifePlanGoal.display_order",
+    )
+    routine: Mapped["LifePlanSpiritualRoutine | None"] = relationship(
+        "LifePlanSpiritualRoutine", back_populates="cycle", uselist=False, cascade="all, delete-orphan"
+    )
+    monthly_reviews: Mapped[list["LifePlanMonthlyReview"]] = relationship(
+        "LifePlanMonthlyReview",
+        back_populates="cycle",
+        cascade="all, delete-orphan",
+        order_by="LifePlanMonthlyReview.review_date",
+    )
+
+
+class LifePlanDiagnosis(Base):
+    """Reflexão por dimensão de vida (Humana, Espiritual, Comunitária, Intelectual, Apostólica)."""
+
+    __tablename__ = "life_plan_diagnoses"
+    __table_args__ = (
+        UniqueConstraint("cycle_id", "dimension", name="uq_diagnosis_cycle_dimension"),
+        Index("idx_life_plan_diagnoses_cycle_id", "cycle_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False
+    )
+    dimension: Mapped[str] = mapped_column(Text, nullable=False)
+    abandonar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    melhorar: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deus_pede: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cycle: Mapped["LifePlanCycle"] = relationship("LifePlanCycle", back_populates="diagnoses")
+
+
+class LifePlanCore(Base):
+    """Núcleo do plano: defeito dominante, virtudes, diretor espiritual. 1:1 com ciclo."""
+
+    __tablename__ = "life_plan_cores"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    dominant_defect: Mapped[str | None] = mapped_column(Text, nullable=True)
+    virtudes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spiritual_director_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    other_devotions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cycle: Mapped["LifePlanCycle"] = relationship("LifePlanCycle", back_populates="core")
+
+
+class LifePlanGoal(Base):
+    """Objetivo do plano. 1 primário (vinculado ao defeito), até 3 secundários."""
+
+    __tablename__ = "life_plan_goals"
+    __table_args__ = (Index("idx_life_plan_goals_cycle_id", "cycle_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False
+    )
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    title: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cycle: Mapped["LifePlanCycle"] = relationship("LifePlanCycle", back_populates="goals")
+    actions: Mapped[list["LifePlanAction"]] = relationship(
+        "LifePlanAction", back_populates="goal", cascade="all, delete-orphan"
+    )
+
+
+class LifePlanAction(Base):
+    """Meio concreto para atingir um objetivo: ação + frequência + contexto."""
+
+    __tablename__ = "life_plan_actions"
+    __table_args__ = (Index("idx_life_plan_actions_goal_id", "goal_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    goal_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_goals.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    frequency: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    goal: Mapped["LifePlanGoal"] = relationship("LifePlanGoal", back_populates="actions")
+
+
+class LifePlanSpiritualRoutine(Base):
+    """Rotina espiritual do ciclo. 1:1 com ciclo."""
+
+    __tablename__ = "life_plan_spiritual_routines"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    prayer_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    prayer_duration: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mass_frequency: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    confession_frequency: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    exam_of_conscience: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    exam_time: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    spiritual_reading: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    spiritual_direction_frequency: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    other_practices: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    cycle: Mapped["LifePlanCycle"] = relationship("LifePlanCycle", back_populates="routine")
+
+
+class LifePlanMonthlyReview(Base):
+    """Revisão mensal do plano. Imutável após criação."""
+
+    __tablename__ = "life_plan_monthly_reviews"
+    __table_args__ = (Index("idx_life_plan_monthly_reviews_cycle_id", "cycle_id"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+    )
+    cycle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False
+    )
+    review_date: Mapped[date] = mapped_column(Date, nullable=False)
+    progress_reflection: Mapped[str | None] = mapped_column(Text, nullable=True)
+    difficulties: Mapped[str | None] = mapped_column(Text, nullable=True)
+    constancy_reflection: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision: Mapped[str] = mapped_column(Text, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    cycle: Mapped["LifePlanCycle"] = relationship("LifePlanCycle", back_populates="monthly_reviews")

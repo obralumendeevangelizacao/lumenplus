@@ -279,17 +279,32 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Projeto de Vida Card */}
+      <TouchableOpacity
+        style={styles.vidaButton}
+        onPress={() => router.push('/vida' as Href)}
+      >
+        <View style={styles.vidaIconContainer}>
+          <Ionicons name="compass" size={24} color={colors.white} />
+        </View>
+        <View style={styles.adminTextContainer}>
+          <Text style={styles.vidaTitle}>Projeto de Vida</Text>
+          <Text style={styles.adminSubtitle}>Plano espiritual personalizado</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+      </TouchableOpacity>
+
       {/* Quick Actions */}
       <Text style={styles.sectionTitle}>Acesso Rápido</Text>
       <View style={styles.quickActions}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.quickActionCard}
           onPress={() => router.push('/(tabs)/profile')}
         >
           <Ionicons name="person-outline" size={28} color={colors.primary} />
           <Text style={styles.quickActionText}>Meu Perfil</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={styles.quickActionCard}
           onPress={() => router.push('/(tabs)/invites')}
@@ -387,6 +402,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.coord,
+  },
+  // Projeto de Vida Button
+  vidaButton: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  vidaIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  vidaTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
   // Retreat Ministry Button
   retreatButton: {
