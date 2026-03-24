@@ -5,7 +5,7 @@
  */
 
 import { Stack } from 'expo-router';
-import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+import { BreadcrumbHeader } from '@/components/ui/BreadcrumbHeader';
 
 const ADMIN: { label: string; href: '/admin' } = { label: 'Administração', href: '/admin' };
 

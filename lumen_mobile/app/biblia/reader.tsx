@@ -17,7 +17,7 @@ import {
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getLivro, getTodosOsLivros, type Livro } from '@/services/bible';
-import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+import { BreadcrumbHeader } from '@/components/ui/BreadcrumbHeader';
 
 const PRIMARY = '#1A859B';
 const WHITE = '#ffffff';

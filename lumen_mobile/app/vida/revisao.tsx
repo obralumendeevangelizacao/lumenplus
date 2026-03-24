@@ -17,8 +17,8 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import lifePlanApi from '@/src/services/lifePlan';
-import { REVIEW_DECISION_OPTIONS, type ReviewDecisionKey } from '@/src/data/vida';
+import lifePlanApi from '@/services/lifePlan';
+import { REVIEW_DECISION_OPTIONS, type ReviewDecisionKey } from '@/data/vida';
 
 const colors = {
   primary: '#1A859B',

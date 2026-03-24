@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { router, Stack, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+import { BreadcrumbHeader } from '@/components/ui/BreadcrumbHeader';
 import {
   getParagrafo,
   getContexto,

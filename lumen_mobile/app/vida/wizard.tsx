@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import lifePlanApi, { type CycleOut } from '@/src/services/lifePlan';
+import lifePlanApi, { type CycleOut } from '@/services/lifePlan';
 import {
   DIMENSIONS,
   VOCATIONAL_REALITIES,
@@ -28,7 +28,7 @@ import {
   CONFESSION_FREQUENCY_OPTIONS,
   WIZARD_STEPS,
   type DimensionKey,
-} from '@/src/data/vida';
+} from '@/data/vida';
 
 const colors = {
   primary: '#1A859B',

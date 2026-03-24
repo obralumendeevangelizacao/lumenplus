@@ -4,7 +4,7 @@
  */
 
 import { Stack } from 'expo-router';
-import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+import { BreadcrumbHeader } from '@/components/ui/BreadcrumbHeader';
 
 const BIBLIA: { label: string; href: '/biblia' } = { label: 'Sagradas Escrituras', href: '/biblia' };
 

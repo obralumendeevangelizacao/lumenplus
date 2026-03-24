@@ -4,7 +4,7 @@
  */
 
 import { Stack } from 'expo-router';
-import { BreadcrumbHeader } from '@/src/components/ui/BreadcrumbHeader';
+import { BreadcrumbHeader } from '@/components/ui/BreadcrumbHeader';
 
 export default function CoordinatorLayout() {
   return (

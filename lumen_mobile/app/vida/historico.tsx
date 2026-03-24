@@ -16,8 +16,8 @@ import {
 } from 'react-native';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import lifePlanApi, { type CycleSummaryOut } from '@/src/services/lifePlan';
-import { STATUS_COLOR, STATUS_LABEL } from '@/src/data/vida';
+import lifePlanApi, { type CycleSummaryOut } from '@/services/lifePlan';
+import { STATUS_COLOR, STATUS_LABEL } from '@/data/vida';
 
 const colors = {
   primary: '#1A859B',
