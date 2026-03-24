@@ -108,6 +108,7 @@ export default function WizardScreen() {
   const [dimStep, setDimStep] = useState(0); // sub-step within diagnóstico
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const totalSteps = WIZARD_STEPS.length;
 
@@ -286,6 +287,14 @@ export default function WizardScreen() {
   };
 
   const handleNext = async () => {
+    // Valida antes de avançar
+    const error = validateCurrentStep();
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+    setValidationError(null);
+
     // Special case: diagnóstico has sub-steps
     if (step === 1 && dimStep < DIMENSIONS.length - 1) {
       const ok = await saveStepData();
@@ -305,6 +314,7 @@ export default function WizardScreen() {
   };
 
   const handleBack = () => {
+    setValidationError(null);
     if (step === 1 && dimStep > 0) {
       setDimStep(dimStep - 1);
       return;
@@ -354,6 +364,55 @@ export default function WizardScreen() {
       ...prev,
       primary_actions: prev.primary_actions.filter((_, i) => i !== idx),
     }));
+  };
+
+  // ── Validation ──────────────────────────────────────────────────────────
+
+  const validateCurrentStep = (): string | null => {
+    // Step 0: Realidade Vocacional obrigatória
+    if (step === 0) {
+      if (!data.vocacional) return 'Selecione sua realidade vocacional para continuar.';
+    }
+
+    // Step 1: Diagnóstico — todas as 3 perguntas da dimensão atual são obrigatórias
+    if (step === 1) {
+      const dim = DIMENSIONS[dimStep];
+      const d = data.diagnoses[dim.key];
+      const empty = [d.abandonar, d.melhorar, d.deus_pede].filter((v) => !v.trim());
+      if (empty.length > 0) {
+        return `Responda às três perguntas da ${dim.label} antes de continuar.`;
+      }
+    }
+
+    // Step 2: Defeito dominante obrigatório
+    if (step === 2) {
+      if (!data.dominant_defect.trim()) {
+        return 'Identifique seu defeito dominante para continuar.';
+      }
+    }
+
+    // Step 3: Título do objetivo obrigatório
+    if (step === 3) {
+      if (data.primary_goal_title.trim().length < 3) {
+        return 'Defina o título do objetivo principal (mínimo 3 caracteres).';
+      }
+    }
+
+    // Step 4: Pelo menos um meio concreto com descrição
+    if (step === 4) {
+      const valid = data.primary_actions.filter((a) => a.action.trim().length > 0);
+      if (valid.length === 0) {
+        return 'Defina pelo menos um meio concreto para alcançar seu objetivo.';
+      }
+    }
+
+    // Step 5: Frequência da Missa e da Confissão obrigatórias
+    if (step === 5) {
+      if (!data.mass_frequency) return 'Selecione a frequência com que participará da Santa Missa.';
+      if (!data.confession_frequency) return 'Selecione a frequência com que receberá o Sacramento da Confissão.';
+    }
+
+    return null;
   };
 
   if (loading) {
@@ -766,6 +825,13 @@ export default function WizardScreen() {
 
       {/* Navigation */}
       <View style={styles.navContainer}>
+        {validationError ? (
+          <View style={styles.validationErrorBox}>
+            <Ionicons name="alert-circle" size={15} color={colors.error} />
+            <Text style={styles.validationErrorText}>{validationError}</Text>
+          </View>
+        ) : null}
+        <View style={styles.navRow}>
         <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Ionicons name="chevron-back" size={20} color={colors.gray} />
           <Text style={styles.backButtonText}>Voltar</Text>
@@ -802,6 +868,7 @@ export default function WizardScreen() {
             )}
           </TouchableOpacity>
         )}
+        </View>
       </View>
     </View>
   );
@@ -954,13 +1021,35 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 15, color: colors.dark },
 
   navContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
     backgroundColor: colors.white,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  validationErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  validationErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.error,
+    lineHeight: 18,
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     flexDirection: 'row',
