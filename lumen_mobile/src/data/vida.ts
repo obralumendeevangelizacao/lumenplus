@@ -61,12 +61,23 @@ export const VOCATIONAL_REALITIES = [
 
 export type VocationalRealityKey = (typeof VOCATIONAL_REALITIES)[number]['key'];
 
+export const PRAYER_TYPE_OPTIONS = [
+  { key: 'LECTIO_DIVINA', label: 'Lectio Divina' },
+  { key: 'ROSARIO', label: 'Rosário' },
+  { key: 'TERCO', label: 'Terço' },
+  { key: 'LAUDES', label: 'Laudes' },
+  { key: 'VESPERAS', label: 'Vésperas' },
+  { key: 'ORACAO_MENTAL', label: 'Oração Mental' },
+  { key: 'ADORACAO', label: 'Adoração Eucarística' },
+  { key: 'LITANIA', label: 'Litania' },
+  { key: 'OUTRO', label: 'Outro' },
+] as const;
+
 export const MASS_FREQUENCY_OPTIONS = [
-  { key: 'DAILY', label: 'Diariamente' },
-  { key: 'WEEKLY_MANY', label: 'Várias vezes por semana' },
-  { key: 'WEEKLY', label: 'Semanalmente (domingo)' },
-  { key: 'BI_WEEKLY', label: 'Quinzenalmente' },
-  { key: 'MONTHLY', label: 'Mensalmente' },
+  { key: 'DAILY', label: 'Diária' },
+  { key: 'WEEKLY_MANY', label: 'Várias vezes na semana' },
+  { key: 'WEEKLY_SUNDAY', label: 'Um dia na semana e Domingo' },
+  { key: 'WEEKLY', label: 'Semanalmente' },
 ] as const;
 
 export const CONFESSION_FREQUENCY_OPTIONS = [

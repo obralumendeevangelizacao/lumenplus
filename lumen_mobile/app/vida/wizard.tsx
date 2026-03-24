@@ -24,6 +24,7 @@ import {
   DIMENSIONS,
   VOCATIONAL_REALITIES,
   DIAGNOSIS_QUESTIONS,
+  PRAYER_TYPE_OPTIONS,
   MASS_FREQUENCY_OPTIONS,
   CONFESSION_FREQUENCY_OPTIONS,
   WIZARD_STEPS,
@@ -58,7 +59,7 @@ type WizardData = {
   primary_goal_title: string;
   primary_goal_description: string;
   primary_actions: { action: string; frequency: string; context: string }[];
-  prayer_type: string;
+  prayer_types: string[]; // multi-select — salvo como string CSV no backend
   prayer_duration: string;
   mass_frequency: string;
   confession_frequency: string;
@@ -87,7 +88,7 @@ const defaultData = (): WizardData => ({
   primary_goal_title: '',
   primary_goal_description: '',
   primary_actions: [{ action: '', frequency: '', context: '' }],
-  prayer_type: '',
+  prayer_types: [],
   prayer_duration: '',
   mass_frequency: '',
   confession_frequency: '',
@@ -146,7 +147,9 @@ export default function WizardScreen() {
         updated.spiritual_director_name = cycle.core.spiritual_director_name || '';
       }
       if (cycle.routine) {
-        updated.prayer_type = cycle.routine.prayer_type || '';
+        updated.prayer_types = cycle.routine.prayer_type
+          ? cycle.routine.prayer_type.split(',').map((s) => s.trim()).filter(Boolean)
+          : [];
         updated.prayer_duration = cycle.routine.prayer_duration || '';
         updated.mass_frequency = cycle.routine.mass_frequency || '';
         updated.confession_frequency = cycle.routine.confession_frequency || '';
@@ -258,7 +261,7 @@ export default function WizardScreen() {
       // Step 5: rotina
       if (step === 5) {
         await lifePlanApi.upsertRoutine(cycleId, {
-          prayer_type: data.prayer_type || null,
+          prayer_type: data.prayer_types.length > 0 ? data.prayer_types.join(', ') : null,
           prayer_duration: data.prayer_duration || null,
           mass_frequency: data.mass_frequency || null,
           confession_frequency: data.confession_frequency || null,
@@ -647,14 +650,30 @@ export default function WizardScreen() {
               Defina as práticas espirituais que sustentarão seu plano.
             </Text>
 
-            <Text style={styles.fieldLabel}>Tipo de oração</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ex: Lectio Divina, Rosário, Laudes..."
-              placeholderTextColor={colors.gray}
-              value={data.prayer_type}
-              onChangeText={(v) => setData((p) => ({ ...p, prayer_type: v }))}
-            />
+            <Text style={styles.fieldLabel}>Tipos de oração (selecione todos que pratica)</Text>
+            <View style={styles.optionGroup}>
+              {PRAYER_TYPE_OPTIONS.map((opt) => {
+                const selected = data.prayer_types.includes(opt.key);
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.chipOption, selected && styles.chipSelected]}
+                    onPress={() =>
+                      setData((p) => ({
+                        ...p,
+                        prayer_types: selected
+                          ? p.prayer_types.filter((k) => k !== opt.key)
+                          : [...p.prayer_types, opt.key],
+                      }))
+                    }
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <Text style={styles.fieldLabel}>Duração da oração</Text>
             <TextInput

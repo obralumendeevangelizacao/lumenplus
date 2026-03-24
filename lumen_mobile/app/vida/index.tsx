@@ -37,6 +37,8 @@ export default function VidaScreen() {
   const [cycle, setCycle] = useState<CycleOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [showActivateConfirm, setShowActivateConfirm] = useState(false);
 
   const fetchCycle = async () => {
     try {
@@ -70,27 +72,24 @@ export default function VidaScreen() {
     }
   };
 
-  const handleActivate = async () => {
+  const handleActivate = () => {
     if (!cycle) return;
-    Alert.alert(
-      'Ativar Projeto de Vida',
-      'Ao ativar, seu plano ficará em vigor. Você poderá fazer revisões mensais. Deseja continuar?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Ativar',
-          onPress: async () => {
-            try {
-              const updated = await lifePlanApi.activateCycle(cycle.id);
-              setCycle(updated);
-            } catch (err: any) {
-              const msg = err?.response?.data?.detail?.message || 'Erro ao ativar ciclo';
-              Alert.alert('Erro', msg);
-            }
-          },
-        },
-      ]
-    );
+    setShowActivateConfirm(true);
+  };
+
+  const confirmActivate = async () => {
+    if (!cycle) return;
+    setActivating(true);
+    setShowActivateConfirm(false);
+    try {
+      const updated = await lifePlanApi.activateCycle(cycle.id);
+      setCycle(updated);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || 'Erro ao ativar ciclo';
+      Alert.alert('Erro', msg);
+    } finally {
+      setActivating(false);
+    }
   };
 
   if (loading) {
@@ -177,11 +176,43 @@ export default function VidaScreen() {
       )}
 
       {/* Activate Button */}
-      {cycle.status === 'DRAFT' && isComplete && (
-        <TouchableOpacity style={styles.activateButton} onPress={handleActivate}>
-          <Ionicons name="rocket-outline" size={20} color={colors.white} />
-          <Text style={styles.activateButtonText}>Ativar Projeto de Vida</Text>
+      {cycle.status === 'DRAFT' && isComplete && !showActivateConfirm && (
+        <TouchableOpacity
+          style={[styles.activateButton, activating && styles.buttonDisabled]}
+          onPress={handleActivate}
+          disabled={activating}
+        >
+          {activating ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <>
+              <Ionicons name="rocket-outline" size={20} color={colors.white} />
+              <Text style={styles.activateButtonText}>Ativar Projeto de Vida</Text>
+            </>
+          )}
         </TouchableOpacity>
+      )}
+
+      {/* Confirmação inline de ativação */}
+      {showActivateConfirm && (
+        <View style={styles.confirmCard}>
+          <Ionicons name="rocket-outline" size={24} color={colors.success} />
+          <Text style={styles.confirmTitle}>Ativar Projeto de Vida?</Text>
+          <Text style={styles.confirmText}>
+            Ao ativar, seu plano entra em vigor e você poderá fazer revisões mensais.
+          </Text>
+          <View style={styles.confirmButtons}>
+            <TouchableOpacity
+              style={styles.confirmCancelButton}
+              onPress={() => setShowActivateConfirm(false)}
+            >
+              <Text style={styles.confirmCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.confirmActivateButton} onPress={confirmActivate}>
+              <Text style={styles.confirmActivateText}>Sim, ativar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Vocational Reality */}
@@ -302,7 +333,7 @@ export default function VidaScreen() {
           </View>
           {cycle.routine.prayer_type && (
             <View style={styles.cardRow}>
-              <Text style={styles.cardLabel}>Oração</Text>
+              <Text style={styles.cardLabel}>Tipos de oração</Text>
               <Text style={styles.cardValue}>{cycle.routine.prayer_type}</Text>
             </View>
           )}
@@ -460,6 +491,43 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   activateButtonText: { color: colors.white, fontSize: 16, fontWeight: '600' },
+  buttonDisabled: { opacity: 0.6 },
+
+  confirmCard: {
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#a7f3d0',
+    padding: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 8,
+  },
+  confirmTitle: { fontSize: 17, fontWeight: '700', color: colors.dark, marginTop: 4 },
+  confirmText: { fontSize: 14, color: colors.gray, textAlign: 'center', lineHeight: 20 },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    width: '100%',
+  },
+  confirmCancelButton: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmCancelText: { fontSize: 15, color: colors.gray, fontWeight: '500' },
+  confirmActivateButton: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  confirmActivateText: { fontSize: 15, color: colors.white, fontWeight: '600' },
 
   card: {
     backgroundColor: colors.white,
