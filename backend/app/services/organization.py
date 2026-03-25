@@ -507,10 +507,10 @@ def get_org_tree(db: Session, user_id: UUID) -> OrgUnit | None:
         select(OrgUnit)
         .where(
             OrgUnit.type == OrgUnitType.CONSELHO_GERAL,
-            OrgUnit.is_active == True,
+            OrgUnit.is_active,
         )
     ).scalar_one_or_none()
-    
+
     return root
 
 
@@ -582,7 +582,7 @@ def search_users_for_invite(
         select(User)
         .join(UserProfile, UserProfile.user_id == User.id, isouter=True)
         .where(
-            User.is_active == True,
+            User.is_active,
             UserProfile.full_name.ilike(search_term),
         )
     )

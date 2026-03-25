@@ -1,9 +1,9 @@
 """Legal documents and consent endpoints."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import desc
 

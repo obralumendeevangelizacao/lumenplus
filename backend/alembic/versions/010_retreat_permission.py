@@ -7,8 +7,6 @@ Create Date: 2026-03-20
 
 from typing import Sequence, Union
 
-from alembic import op
-
 revision: str = "015_retreat_permission"
 down_revision: Union[str, None] = "014_retreat_module"
 branch_labels: Union[str, Sequence[str], None] = None
