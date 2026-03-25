@@ -70,9 +70,7 @@ def sample_org_structure(db_session: Session) -> dict:
 
 
 @pytest.fixture
-def user_with_membership(
-    db_session: Session, test_user: User, sample_org_structure: dict
-) -> User:
+def user_with_membership(db_session: Session, test_user: User, sample_org_structure: dict) -> User:
     """Usuário com membership ativo no ministry."""
     membership = OrgMembership(
         user_id=test_user.id,
@@ -90,9 +88,7 @@ def user_with_membership(
 # =============================================================================
 
 
-def test_expand_org_units_empty_for_no_memberships(
-    db_session: Session, test_user: User
-) -> None:
+def test_expand_org_units_empty_for_no_memberships(db_session: Session, test_user: User) -> None:
     result = expand_org_units_for_user(db_session, test_user.id)
     assert result == set()
 

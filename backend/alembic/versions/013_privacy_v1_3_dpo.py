@@ -39,16 +39,13 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     existing = conn.execute(
-        sa.text(
-            "SELECT id FROM legal_documents WHERE type = 'PRIVACY' AND version = '1.3'"
-        )
+        sa.text("SELECT id FROM legal_documents WHERE type = 'PRIVACY' AND version = '1.3'")
     ).fetchone()
 
     if existing:
         conn.execute(
             sa.text(
-                "UPDATE legal_documents SET content = :c "
-                "WHERE type = 'PRIVACY' AND version = '1.3'"
+                "UPDATE legal_documents SET content = :c WHERE type = 'PRIVACY' AND version = '1.3'"
             ),
             {"c": PRIVACY_V1_3},
         )
@@ -69,6 +66,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DELETE FROM legal_documents WHERE version = '1.3' AND type = 'PRIVACY'"
-    )
+    op.execute("DELETE FROM legal_documents WHERE version = '1.3' AND type = 'PRIVACY'")

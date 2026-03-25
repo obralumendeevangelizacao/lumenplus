@@ -12,7 +12,15 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DBSession
-from app.db.models import MembershipStatus, OrgMembership, OrgUnit, OrgUnitType, GroupType, Visibility, OrgRoleCode
+from app.db.models import (
+    MembershipStatus,
+    OrgMembership,
+    OrgUnit,
+    OrgUnitType,
+    GroupType,
+    Visibility,
+    OrgRoleCode,
+)
 from app.schemas.organization import (
     CreateOrgUnitRequest,
     InviteDetailOut,
@@ -705,11 +713,16 @@ async def set_retreat_scope(
     if not any(r in roles for r in ("ADMIN", "DEV")):
         raise HTTPException(
             status_code=403,
-            detail={"error": "forbidden", "message": "Apenas administradores podem configurar este campo"},
+            detail={
+                "error": "forbidden",
+                "message": "Apenas administradores podem configurar este campo",
+            },
         )
     unit = db.get(OrgUnit, unit_id)
     if not unit:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Unidade não encontrada"}
+        )
     unit.retreat_scope = enabled
     db.commit()
     return {"id": str(unit.id), "name": unit.name, "retreat_scope": unit.retreat_scope}

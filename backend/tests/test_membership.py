@@ -30,9 +30,7 @@ class TestMembershipFlow:
         response = client.get("/org/my/invites")
         assert response.status_code == 401
 
-    def test_my_invites_returns_empty_list(
-        self, client: TestClient, auth_headers: dict, seeded_db
-    ):
+    def test_my_invites_returns_empty_list(self, client: TestClient, auth_headers: dict, seeded_db):
         """Usuário novo não tem convites."""
         response = client.get("/org/my/invites", headers=auth_headers)
         assert response.status_code == 200

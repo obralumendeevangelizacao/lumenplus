@@ -13,9 +13,18 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.db.models import (
-    User, GlobalRole, UserGlobalRole,
-    OrgUnit, OrgUnitType, Visibility, OrgMembership, OrgRoleCode, MembershipStatus,
-    LegalDocument, ProfileCatalog, ProfileCatalogItem,
+    User,
+    GlobalRole,
+    UserGlobalRole,
+    OrgUnit,
+    OrgUnitType,
+    Visibility,
+    OrgMembership,
+    OrgRoleCode,
+    MembershipStatus,
+    LegalDocument,
+    ProfileCatalog,
+    ProfileCatalogItem,
 )
 from app.api.routes.auth import get_current_user
 
@@ -31,7 +40,7 @@ async def seed_database(db: Session = Depends(get_db)):
         "org_units": 0,
         "users": 0,
     }
-    
+
     # Global Roles
     roles = [
         ("DEV", "Desenvolvedor"),
@@ -41,39 +50,73 @@ async def seed_database(db: Session = Depends(get_db)):
         ("ANALISTA", "Analista"),
     ]
     for code, name in roles:
-        existing = db.execute(select(GlobalRole).where(GlobalRole.code == code)).scalar_one_or_none()
+        existing = db.execute(
+            select(GlobalRole).where(GlobalRole.code == code)
+        ).scalar_one_or_none()
         if not existing:
             db.add(GlobalRole(code=code, name=name))
             results["global_roles"] += 1
-    
+
     # Legal Documents — importados da migration canônica
     from app.legal_content import TERMS_V1, PRIVACY_V1
+
     docs = [
         ("TERMS", "1.0", TERMS_V1),
         ("PRIVACY", "1.0", PRIVACY_V1),
     ]
     for doc_type, version, content in docs:
         existing = db.execute(
-            select(LegalDocument).where(LegalDocument.type == doc_type, LegalDocument.version == version)
+            select(LegalDocument).where(
+                LegalDocument.type == doc_type, LegalDocument.version == version
+            )
         ).scalar_one_or_none()
         if not existing:
             db.add(LegalDocument(type=doc_type, version=version, content=content))
             results["legal_docs"] += 1
-    
+
     # Profile Catalogs
     catalogs_seed = [
-        ("LIFE_STATE", "Estado de Vida", [
-            "Leigo", "Leigo Consagrado", "Novica", "Seminarista", "Religioso",
-            "Diacono Permanente", "Diacono", "Sacerdote Religioso", "Sacerdote Diocesano", "Bispo",
-        ]),
-        ("MARITAL_STATUS", "Estado Civil", [
-            "Solteiro", "Noivo", "Casado", "Divorciado", "Viuvo", "Uniao Estavel",
-        ]),
-        ("VOCATIONAL_REALITY", "Realidade Vocacional", [
-            "Membro do Acolhida", "Membro do Aprofundamento", "Vocacional",
-            "Postulante de Primeiro Ano", "Postulante de Segundo Ano",
-            "Discipulo Vocacional", "Consagrado Filho da Luz",
-        ]),
+        (
+            "LIFE_STATE",
+            "Estado de Vida",
+            [
+                "Leigo",
+                "Leigo Consagrado",
+                "Novica",
+                "Seminarista",
+                "Religioso",
+                "Diacono Permanente",
+                "Diacono",
+                "Sacerdote Religioso",
+                "Sacerdote Diocesano",
+                "Bispo",
+            ],
+        ),
+        (
+            "MARITAL_STATUS",
+            "Estado Civil",
+            [
+                "Solteiro",
+                "Noivo",
+                "Casado",
+                "Divorciado",
+                "Viuvo",
+                "Uniao Estavel",
+            ],
+        ),
+        (
+            "VOCATIONAL_REALITY",
+            "Realidade Vocacional",
+            [
+                "Membro do Acolhida",
+                "Membro do Aprofundamento",
+                "Vocacional",
+                "Postulante de Primeiro Ano",
+                "Postulante de Segundo Ano",
+                "Discipulo Vocacional",
+                "Consagrado Filho da Luz",
+            ],
+        ),
     ]
     existing_catalogs = {c.code for c in db.execute(select(ProfileCatalog)).scalars().all()}
     for code, name, items in catalogs_seed:
@@ -84,7 +127,11 @@ async def seed_database(db: Session = Depends(get_db)):
             results["catalogs"] = results.get("catalogs", 0) + 1
             for i, label in enumerate(items):
                 item_code = label.upper().replace(" ", "_")[:50]
-                db.add(ProfileCatalogItem(catalog_id=catalog.id, code=item_code, label=label, sort_order=i))
+                db.add(
+                    ProfileCatalogItem(
+                        catalog_id=catalog.id, code=item_code, label=label, sort_order=i
+                    )
+                )
                 results["catalog_items"] = results.get("catalog_items", 0) + 1
 
     db.commit()
@@ -102,16 +149,22 @@ async def create_conselho_geral(
     # Verifica se é DEV
     is_dev = any(ugr.global_role.code == "DEV" for ugr in user.global_roles)
     if not is_dev:
-        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Apenas DEV pode criar Conselho Geral"})
-    
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Apenas DEV pode criar Conselho Geral"},
+        )
+
     # Verifica se já existe
     existing = db.execute(
         select(OrgUnit).where(OrgUnit.type == OrgUnitType.CONSELHO_GERAL)
     ).scalar_one_or_none()
-    
+
     if existing:
-        raise HTTPException(status_code=400, detail={"error": "already_exists", "message": "Conselho Geral já existe"})
-    
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "already_exists", "message": "Conselho Geral já existe"},
+        )
+
     # Cria
     slug = name.lower().replace(" ", "-")
     conselho = OrgUnit(
@@ -123,7 +176,7 @@ async def create_conselho_geral(
     )
     db.add(conselho)
     db.flush()
-    
+
     # Adiciona criador como coordenador
     membership = OrgMembership(
         user_id=user.id,
@@ -132,17 +185,17 @@ async def create_conselho_geral(
         status=MembershipStatus.ACTIVE,
     )
     db.add(membership)
-    
+
     db.commit()
     db.refresh(conselho)
-    
+
     return {
         "message": "Conselho Geral criado",
         "org_unit": {
             "id": str(conselho.id),
             "name": conselho.name,
             "slug": conselho.slug,
-        }
+        },
     }
 
 
@@ -157,18 +210,26 @@ async def assign_global_role(
     # Verifica se é DEV
     is_dev = any(ugr.global_role.code == "DEV" for ugr in user.global_roles)
     if not is_dev:
-        raise HTTPException(status_code=403, detail={"error": "forbidden", "message": "Apenas DEV pode atribuir roles"})
-    
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Apenas DEV pode atribuir roles"},
+        )
+
     # Busca role
     role = db.execute(select(GlobalRole).where(GlobalRole.code == role_code)).scalar_one_or_none()
     if not role:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": f"Role {role_code} não encontrada"})
-    
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": f"Role {role_code} não encontrada"},
+        )
+
     # Busca usuário
     target = db.get(User, target_user_id)
     if not target:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Usuário não encontrado"})
-    
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Usuário não encontrado"}
+        )
+
     # Verifica se já tem
     existing = db.execute(
         select(UserGlobalRole).where(
@@ -176,15 +237,15 @@ async def assign_global_role(
             UserGlobalRole.global_role_id == role.id,
         )
     ).scalar_one_or_none()
-    
+
     if existing:
         return {"message": "Usuário já possui esta role"}
-    
+
     # Atribui
     ugr = UserGlobalRole(user_id=target_user_id, global_role_id=role.id)
     db.add(ugr)
     db.commit()
-    
+
     return {"message": f"Role {role_code} atribuída ao usuário"}
 
 
@@ -201,7 +262,7 @@ async def make_me_dev(
         role = GlobalRole(code="DEV", name="Desenvolvedor")
         db.add(role)
         db.flush()
-    
+
     # Verifica se já tem
     existing = db.execute(
         select(UserGlobalRole).where(
@@ -209,15 +270,15 @@ async def make_me_dev(
             UserGlobalRole.global_role_id == role.id,
         )
     ).scalar_one_or_none()
-    
+
     if existing:
         return {"message": "Você já é DEV"}
-    
+
     # Atribui
     ugr = UserGlobalRole(user_id=user.id, global_role_id=role.id)
     db.add(ugr)
     db.commit()
-    
+
     return {"message": "Você agora é DEV!", "user_id": str(user.id)}
 
 
@@ -229,7 +290,7 @@ async def grant_inbox_permission(
     """Dá permissão para enviar avisos ao usuário atual."""
     from app.db.models import UserPermission
     from app.services.inbox_service import PERMISSION_SEND_INBOX
-    
+
     # Verifica se já tem
     existing = db.execute(
         select(UserPermission).where(
@@ -237,10 +298,10 @@ async def grant_inbox_permission(
             UserPermission.permission_code == PERMISSION_SEND_INBOX,
         )
     ).scalar_one_or_none()
-    
+
     if existing:
         return {"message": "Você já tem permissão para enviar avisos"}
-    
+
     # Cria permissão
     permission = UserPermission(
         user_id=user.id,
@@ -248,7 +309,7 @@ async def grant_inbox_permission(
     )
     db.add(permission)
     db.commit()
-    
+
     return {
         "message": "Permissão concedida! Agora você pode enviar avisos.",
         "permission": PERMISSION_SEND_INBOX,
@@ -264,18 +325,18 @@ async def revoke_inbox_permission(
     """Remove permissão de enviar avisos do usuário atual."""
     from app.db.models import UserPermission
     from app.services.inbox_service import PERMISSION_SEND_INBOX
-    
+
     existing = db.execute(
         select(UserPermission).where(
             UserPermission.user_id == user.id,
             UserPermission.permission_code == PERMISSION_SEND_INBOX,
         )
     ).scalar_one_or_none()
-    
+
     if not existing:
         return {"message": "Você não tem essa permissão"}
-    
+
     db.delete(existing)
     db.commit()
-    
+
     return {"message": "Permissão removida"}

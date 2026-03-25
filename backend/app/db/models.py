@@ -82,7 +82,10 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -124,7 +127,10 @@ class UserIdentity(Base):
     __tablename__ = "user_identities"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -258,7 +264,10 @@ class UserEmergencyContact(Base):
     __tablename__ = "user_emergency_contacts"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -284,7 +293,10 @@ class ProfileCatalog(Base):
     __tablename__ = "profile_catalogs"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -300,7 +312,10 @@ class ProfileCatalogItem(Base):
     __tablename__ = "profile_catalog_items"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     catalog_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("profile_catalogs.id", ondelete="CASCADE"), nullable=False
@@ -308,7 +323,9 @@ class ProfileCatalogItem(Base):
     code: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str] = mapped_column(Text, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     __table_args__ = (UniqueConstraint("catalog_id", "code", name="uq_catalog_item_code"),)
     catalog: Mapped["ProfileCatalog"] = relationship("ProfileCatalog", back_populates="items")
@@ -321,7 +338,10 @@ class GlobalRole(Base):
     __tablename__ = "global_roles"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -331,7 +351,10 @@ class UserGlobalRole(Base):
     __tablename__ = "user_global_roles"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -358,7 +381,10 @@ class OrgUnit(Base):
     __tablename__ = "org_units"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     type: Mapped[OrgUnitType] = mapped_column(
         Enum(OrgUnitType, name="org_unit_type", create_constraint=False), nullable=False
@@ -385,9 +411,7 @@ class OrgUnit(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        Index("idx_org_units_parent_id", "parent_id"),
-    )
+    __table_args__ = (Index("idx_org_units_parent_id", "parent_id"),)
 
     parent: Mapped["OrgUnit | None"] = relationship(
         "OrgUnit", remote_side=[id], back_populates="children"
@@ -407,7 +431,10 @@ class OrgMembership(Base):
     __tablename__ = "org_memberships"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -447,7 +474,10 @@ class OrgInvite(Base):
     __tablename__ = "org_invites"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     org_unit_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("org_units.id", ondelete="CASCADE"), nullable=False
@@ -496,7 +526,10 @@ class PhoneVerification(Base):
     __tablename__ = "phone_verifications"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -514,7 +547,10 @@ class EmailVerification(Base):
     __tablename__ = "email_verifications"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -533,7 +569,10 @@ class LegalDocument(Base):
     __tablename__ = "legal_documents"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     type: Mapped[str] = mapped_column(Text, nullable=False)
     version: Mapped[str] = mapped_column(Text, nullable=False)
@@ -549,7 +588,10 @@ class UserConsent(Base):
     __tablename__ = "user_consents"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -579,7 +621,10 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     actor_user_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     action: Mapped[str] = mapped_column(Text, nullable=False)
@@ -608,7 +653,10 @@ class InboxMessage(Base):
     __tablename__ = "inbox_messages"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -656,7 +704,10 @@ class InboxRecipient(Base):
     __tablename__ = "inbox_recipients"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     message_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("inbox_messages.id", ondelete="CASCADE"), nullable=False
@@ -690,7 +741,10 @@ class UserPermission(Base):
     __tablename__ = "user_permissions"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -721,7 +775,10 @@ class SensitiveAccessRequest(Base):
     __tablename__ = "sensitive_access_requests"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     requester_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -751,7 +808,10 @@ class SensitiveAccessAudit(Base):
     __tablename__ = "sensitive_access_audit"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     request_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     viewer_user_id: Mapped[UUID] = mapped_column(
@@ -835,7 +895,10 @@ class Retreat(Base):
     __tablename__ = "retreats"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -881,10 +944,16 @@ class Retreat(Base):
         "RetreatFeeType", back_populates="retreat", cascade="all, delete-orphan"
     )
     service_teams: Mapped[list["RetreatServiceTeam"]] = relationship(
-        "RetreatServiceTeam", back_populates="retreat", cascade="all, delete-orphan", lazy="selectin"
+        "RetreatServiceTeam",
+        back_populates="retreat",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     coordinators: Mapped[list["RetreatCoordinator"]] = relationship(
-        "RetreatCoordinator", back_populates="retreat", cascade="all, delete-orphan", lazy="selectin"
+        "RetreatCoordinator",
+        back_populates="retreat",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_user_id])
 
@@ -893,13 +962,20 @@ class RetreatEligibilityRule(Base):
     __tablename__ = "retreat_eligibility_rules"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
     )
     rule_type: Mapped[RetreatEligibilityRuleType] = mapped_column(
-        Enum(RetreatEligibilityRuleType, name="retreat_eligibility_rule_type", create_constraint=False),
+        Enum(
+            RetreatEligibilityRuleType,
+            name="retreat_eligibility_rule_type",
+            create_constraint=False,
+        ),
         nullable=False,
     )
     org_unit_id: Mapped[UUID | None] = mapped_column(
@@ -917,7 +993,10 @@ class RetreatRegistration(Base):
     __tablename__ = "retreat_registrations"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
@@ -931,7 +1010,9 @@ class RetreatRegistration(Base):
         default=RegistrationStatus.PENDING_PAYMENT,
         server_default="PENDING_PAYMENT",
     )
-    modality_preference: Mapped[str | None] = mapped_column(Text, nullable=True)  # PRESENCIAL | HIBRIDO
+    modality_preference: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # PRESENCIAL | HIBRIDO
     retreat_role: Mapped[str] = mapped_column(Text, nullable=False, server_default="PARTICIPANTE")
     fee_category: Mapped[str | None] = mapped_column(Text, nullable=True)
     assigned_house_id: Mapped[UUID | None] = mapped_column(
@@ -939,12 +1020,18 @@ class RetreatRegistration(Base):
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_proof_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    payment_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    payment_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    payment_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     payment_confirmed_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    payment_rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_rejected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     payment_rejected_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -969,14 +1056,20 @@ class RetreatRegistration(Base):
         "User", foreign_keys=[payment_rejected_by_user_id]
     )
     cancelled_by: Mapped["User | None"] = relationship("User", foreign_keys=[cancelled_by_user_id])
-    assigned_house: Mapped["RetreatHouse | None"] = relationship("RetreatHouse", foreign_keys=[assigned_house_id])
+    assigned_house: Mapped["RetreatHouse | None"] = relationship(
+        "RetreatHouse", foreign_keys=[assigned_house_id]
+    )
     team_preferences: Mapped[list["RetreatTeamPreference"]] = relationship(
-        "RetreatTeamPreference", back_populates="registration",
-        cascade="all, delete-orphan", lazy="selectin"
+        "RetreatTeamPreference",
+        back_populates="registration",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     team_assignment_entries: Mapped[list["RetreatServiceTeamMember"]] = relationship(
-        "RetreatServiceTeamMember", back_populates="registration",
-        cascade="all, delete-orphan", lazy="selectin"
+        "RetreatServiceTeamMember",
+        back_populates="registration",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -984,7 +1077,10 @@ class RetreatHouse(Base):
     __tablename__ = "retreat_houses"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
@@ -1000,7 +1096,10 @@ class RetreatFeeType(Base):
     __tablename__ = "retreat_fee_types"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
@@ -1008,7 +1107,9 @@ class RetreatFeeType(Base):
     fee_category: Mapped[str] = mapped_column(Text, nullable=False)
     amount_brl: Mapped[str] = mapped_column(String(20), nullable=False)
 
-    __table_args__ = (UniqueConstraint("retreat_id", "fee_category", name="uq_retreat_fee_category"),)
+    __table_args__ = (
+        UniqueConstraint("retreat_id", "fee_category", name="uq_retreat_fee_category"),
+    )
 
     retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="fee_types")
 
@@ -1017,7 +1118,10 @@ class RetreatServiceTeam(Base):
     __tablename__ = "retreat_service_teams"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
@@ -1028,8 +1132,10 @@ class RetreatServiceTeam(Base):
 
     retreat: Mapped["Retreat"] = relationship("Retreat", back_populates="service_teams")
     members: Mapped[list["RetreatServiceTeamMember"]] = relationship(
-        "RetreatServiceTeamMember", back_populates="team",
-        cascade="all, delete-orphan", lazy="selectin"
+        "RetreatServiceTeamMember",
+        back_populates="team",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
     preferences: Mapped[list["RetreatTeamPreference"]] = relationship(
         "RetreatTeamPreference", back_populates="team", cascade="all, delete-orphan"
@@ -1040,13 +1146,20 @@ class RetreatServiceTeamMember(Base):
     __tablename__ = "retreat_service_team_members"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     team_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("retreat_service_teams.id", ondelete="CASCADE"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("retreat_service_teams.id", ondelete="CASCADE"),
+        nullable=False,
     )
     registration_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("retreat_registrations.id", ondelete="CASCADE"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("retreat_registrations.id", ondelete="CASCADE"),
+        nullable=False,
     )
     house_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreat_houses.id", ondelete="SET NULL"), nullable=True
@@ -1063,7 +1176,9 @@ class RetreatServiceTeamMember(Base):
         UniqueConstraint("team_id", "registration_id", name="uq_team_member_registration"),
     )
 
-    team: Mapped["RetreatServiceTeam"] = relationship("RetreatServiceTeam", back_populates="members")
+    team: Mapped["RetreatServiceTeam"] = relationship(
+        "RetreatServiceTeam", back_populates="members"
+    )
     registration: Mapped["RetreatRegistration"] = relationship(
         "RetreatRegistration", back_populates="team_assignment_entries"
     )
@@ -1074,20 +1189,29 @@ class RetreatTeamPreference(Base):
     __tablename__ = "retreat_team_preferences"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     registration_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("retreat_registrations.id", ondelete="CASCADE"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("retreat_registrations.id", ondelete="CASCADE"),
+        nullable=False,
     )
     team_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("retreat_service_teams.id", ondelete="CASCADE"), nullable=False
+        PGUUID(as_uuid=True),
+        ForeignKey("retreat_service_teams.id", ondelete="CASCADE"),
+        nullable=False,
     )
     preference_order: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("registration_id", "team_id", name="uq_team_preference_reg_team"),
-        UniqueConstraint("registration_id", "preference_order", name="uq_team_preference_reg_order"),
+        UniqueConstraint(
+            "registration_id", "preference_order", name="uq_team_preference_reg_order"
+        ),
     )
 
     registration: Mapped["RetreatRegistration"] = relationship(
@@ -1103,10 +1227,14 @@ class RetreatCoordinator(Base):
     Coordenador de um retiro específico.
     Garante acesso à gestão do retiro sem precisar de cargo global.
     """
+
     __tablename__ = "retreat_coordinators"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     retreat_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False
@@ -1149,7 +1277,10 @@ class LifePlanCycle(Base):
     )
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
@@ -1177,7 +1308,10 @@ class LifePlanCycle(Base):
         order_by="LifePlanGoal.display_order",
     )
     routine: Mapped["LifePlanSpiritualRoutine | None"] = relationship(
-        "LifePlanSpiritualRoutine", back_populates="cycle", uselist=False, cascade="all, delete-orphan"
+        "LifePlanSpiritualRoutine",
+        back_populates="cycle",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
     monthly_reviews: Mapped[list["LifePlanMonthlyReview"]] = relationship(
         "LifePlanMonthlyReview",
@@ -1197,7 +1331,10 @@ class LifePlanDiagnosis(Base):
     )
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     cycle_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False
@@ -1220,10 +1357,16 @@ class LifePlanCore(Base):
     __tablename__ = "life_plan_cores"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     cycle_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False, unique=True
+        PGUUID(as_uuid=True),
+        ForeignKey("life_plan_cycles.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
     )
     dominant_defect: Mapped[str | None] = mapped_column(Text, nullable=True)
     virtudes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -1244,7 +1387,10 @@ class LifePlanGoal(Base):
     __table_args__ = (Index("idx_life_plan_goals_cycle_id", "cycle_id"),)
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     cycle_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False
@@ -1271,7 +1417,10 @@ class LifePlanAction(Base):
     __table_args__ = (Index("idx_life_plan_actions_goal_id", "goal_id"),)
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     goal_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("life_plan_goals.id", ondelete="CASCADE"), nullable=False
@@ -1293,10 +1442,16 @@ class LifePlanSpiritualRoutine(Base):
     __tablename__ = "life_plan_spiritual_routines"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     cycle_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False, unique=True
+        PGUUID(as_uuid=True),
+        ForeignKey("life_plan_cycles.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
     )
     prayer_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
     prayer_duration: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -1322,7 +1477,10 @@ class LifePlanMonthlyReview(Base):
     __table_args__ = (Index("idx_life_plan_monthly_reviews_cycle_id", "cycle_id"),)
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=_uuid_mod.uuid4, server_default=func.gen_random_uuid()
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=_uuid_mod.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     cycle_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("life_plan_cycles.id", ondelete="CASCADE"), nullable=False

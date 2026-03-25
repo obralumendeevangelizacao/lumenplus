@@ -224,8 +224,7 @@ PRIVACY_V1_2 = PRIVACY_V1.replace("Versão 1.0", "Versão 1.2")
 
 # v1.3 — DPO formalmente designado: Elias Sales de Freitas, oeliasandraade@gmail.com
 PRIVACY_V1_3 = (
-    PRIVACY_V1_2
-    .replace("Versão 1.2", "Versão 1.3")
+    PRIVACY_V1_2.replace("Versão 1.2", "Versão 1.3")
     .replace(
         "E-mail do Encarregado (DPO): privacidade@obralumen.org.br",
         "Encarregado (DPO): Elias Sales de Freitas\nE-mail: oeliasandraade@gmail.com",

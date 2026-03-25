@@ -35,9 +35,7 @@ def upgrade() -> None:
 
     for doc_type, content in [("TERMS", TERMS_V1_2), ("PRIVACY", PRIVACY_V1_2)]:
         existing = conn.execute(
-            sa.text(
-                "SELECT id FROM legal_documents WHERE type = :t AND version = '1.2'"
-            ),
+            sa.text("SELECT id FROM legal_documents WHERE type = :t AND version = '1.2'"),
             {"t": doc_type},
         ).fetchone()
 
@@ -65,6 +63,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DELETE FROM legal_documents WHERE version = '1.2' AND type IN ('TERMS', 'PRIVACY')"
-    )
+    op.execute("DELETE FROM legal_documents WHERE version = '1.2' AND type IN ('TERMS', 'PRIVACY')")

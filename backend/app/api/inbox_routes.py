@@ -173,6 +173,7 @@ def get_my_permissions(
     # Verifica acesso a retiros: ADMIN/DEV, PERMISSION_MANAGE_RETREATS ou
     # membro ativo de qualquer unidade com retreat_scope=True
     from app.api.admin_retreat_routes import _is_global_retreat_manager
+
     has_retreat = _is_global_retreat_manager(db, current_user.id)
     if not has_retreat:
         retreat_membership = db.execute(
