@@ -4,6 +4,7 @@ Rotas de Organização
 Unidades organizacionais, convites, membros.
 """
 
+from typing import Any, Never
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -53,7 +54,7 @@ from app.services.organization import (
 router = APIRouter(prefix="/org", tags=["organization"])
 
 
-def handle_org_error(e: OrgServiceError):
+def handle_org_error(e: OrgServiceError) -> Never:
     """Converte OrgServiceError em HTTPException."""
     status_codes = {
         "permission_denied": 403,
@@ -81,7 +82,7 @@ async def create_root_unit(
     data: CreateOrgUnitRequest,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """
     Cria a unidade raiz (CONSELHO_GERAL). Requer papel global DEV ou ADMIN.
     Só pode existir uma unidade raiz ativa.
@@ -144,7 +145,7 @@ async def create_root_unit(
 async def list_ministries(
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """
     Lista todos os ministérios ativos (tipo MINISTERIO).
 
@@ -171,7 +172,7 @@ async def list_ministries(
 async def get_organization_tree(
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Retorna árvore organizacional.
 
     Carrega todos os nós e memberships em 2 queries (eager loading) em vez de N+1.
@@ -232,7 +233,7 @@ async def create_child_unit(
     data: CreateOrgUnitRequest,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Cria unidade filha."""
     # Determina tipo baseado no parent
     parent = db.get(OrgUnit, parent_id)
@@ -296,7 +297,7 @@ async def get_org_unit(
     org_unit_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Retorna detalhes de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
     if not unit:
@@ -328,7 +329,7 @@ async def list_members(
     org_unit_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Lista membros de uma unidade."""
     unit = db.get(OrgUnit, org_unit_id)
     if not unit:
@@ -377,7 +378,7 @@ async def send_member_invite(
     data: SendInviteRequest,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Envia convite para participar da unidade."""
     try:
         role = OrgRoleCode(data.role) if data.role else OrgRoleCode.MEMBER
@@ -405,7 +406,7 @@ async def list_pending_invites(
     org_unit_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Lista convites pendentes da unidade (só coordenador)."""
     try:
         invites = get_org_unit_pending_invites(db, org_unit_id, user.id)
@@ -454,7 +455,7 @@ async def accept_invite(
     invite_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Aceita um convite."""
     try:
         invite = respond_to_invite(db, invite_id, user.id, accept=True)
@@ -472,7 +473,7 @@ async def reject_invite(
     invite_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Rejeita um convite."""
     try:
         invite = respond_to_invite(db, invite_id, user.id, accept=False)
@@ -494,7 +495,7 @@ async def reject_invite(
 async def get_my_pending_invites(
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Lista convites pendentes do usuário logado."""
     invites = get_user_pending_invites(db, user.id)
 
@@ -532,7 +533,7 @@ async def get_my_pending_invites(
 async def get_my_memberships(
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Lista memberships ativos do usuário."""
     memberships = (
         db.execute(
@@ -574,7 +575,7 @@ async def search_users_to_invite(
     user: CurrentUser,
     db: DBSession,
     q: str = "",
-):
+) -> Any:
     """Busca usuários para convidar (exclui membros e convites pendentes)."""
     if len(q) < 2:
         return []
@@ -605,7 +606,7 @@ async def update_member_role_endpoint(
     role: str,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Atualiza papel de um membro (COORDINATOR ou MEMBER)."""
     try:
         new_role = OrgRoleCode(role)
@@ -631,7 +632,7 @@ async def remove_member_endpoint(
     member_user_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Remove um membro da unidade."""
     try:
         remove_member(db, org_unit_id, member_user_id, user.id)
@@ -645,7 +646,7 @@ async def leave_unit(
     org_unit_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Sai de uma unidade (remove a si mesmo)."""
     try:
         remove_member(db, org_unit_id, user.id, user.id)
@@ -659,7 +660,7 @@ async def get_unit_permissions(
     org_unit_id: UUID,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Retorna permissões do usuário na unidade."""
     return get_user_permissions(db, user.id, org_unit_id)
 
@@ -675,7 +676,7 @@ async def update_org_unit_endpoint(
     data: UpdateOrgUnitRequest,
     user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Edita nome e/ou descrição de uma unidade. Requer permissão hierárquica."""
     try:
         unit = update_org_unit(
@@ -707,7 +708,7 @@ async def set_retreat_scope(
     user: CurrentUser,
     db: DBSession,
     enabled: bool = True,
-):
+) -> Any:
     """Ativa ou desativa escopo de retiro numa unidade organizacional. Requer ADMIN ou DEV."""
     roles = get_user_global_roles(db, user.id)
     if not any(r in roles for r in ("ADMIN", "DEV")):

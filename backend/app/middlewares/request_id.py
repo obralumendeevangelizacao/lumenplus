@@ -5,7 +5,7 @@ Adiciona request_id único a cada requisição para rastreabilidade.
 """
 
 import uuid
-from typing import Callable
+from typing import Any, Callable
 
 import structlog
 from fastapi import Request, Response
@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Middleware que adiciona request_id único a cada requisição."""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Response:
         # Usa header existente ou gera novo
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
 
@@ -32,7 +32,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         # Armazena no state para acesso em outras partes
         request.state.request_id = request_id
 
-        response = await call_next(request)
+        response: Response = await call_next(request)
 
         # Adiciona header na resposta
         response.headers["X-Request-ID"] = request_id

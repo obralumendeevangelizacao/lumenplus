@@ -9,6 +9,7 @@ Schemas vivem em app.schemas.profile — este módulo apenas orquestra.
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _is_profile_complete(full_name, birth_date, phone_e164, city, state) -> bool:
+def _is_profile_complete(full_name: Any, birth_date: Any, phone_e164: Any, city: Any, state: Any) -> bool:
     """Retorna True se todos os campos obrigatórios do perfil estão preenchidos."""
     return all([full_name, birth_date, phone_e164, city, state])
 
@@ -54,7 +55,8 @@ def _parse_json_list(value: str | None) -> list[str] | None:
     if not value:
         return None
     try:
-        return json.loads(value)
+        result: list[str] = json.loads(value)
+        return result
     except (json.JSONDecodeError, ValueError):
         logger.warning("Falha ao desserializar campo JSON do perfil: %.50s", value)
         return None

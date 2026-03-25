@@ -1,9 +1,10 @@
 import logging
 import time
 from dataclasses import dataclass
+from typing import cast
 
 import httpx
-from cachetools import TTLCache
+from cachetools import TTLCache  # type: ignore[import-untyped]
 from jose import jwt
 from jose.exceptions import JWTError
 
@@ -151,12 +152,12 @@ class FirebaseAuth:
         cache_key = "firebase_certs"
 
         if cache_key in _certs_cache:
-            return _certs_cache[cache_key]
+            return cast(dict[str, str], _certs_cache[cache_key])
 
         try:
             response = httpx.get(FIREBASE_CERTS_URL, timeout=10.0)
             response.raise_for_status()
-            keys = response.json()
+            keys: dict[str, str] = response.json()
             _certs_cache[cache_key] = keys
             return keys
         except Exception as e:

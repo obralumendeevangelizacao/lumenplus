@@ -133,11 +133,14 @@ async def start_phone_verification(
     message = (
         f"Seu codigo de verificacao Lumen+ e: {code}. Valido por {CODE_EXPIRY_MINUTES} minutos."
     )
+    _provider = notification_provider
     try:
+        if _provider is None:
+            raise NotImplementedError("No notification provider configured")
         if body.channel == "SMS":
-            notification_provider.send_sms(body.phone_e164, message)
+            _provider.send_sms(body.phone_e164, message)
         else:
-            notification_provider.send_whatsapp(body.phone_e164, message)
+            _provider.send_whatsapp(body.phone_e164, message)
     except NotImplementedError:
         if not settings.is_dev:
             db.rollback()

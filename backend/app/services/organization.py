@@ -5,6 +5,7 @@ Gerencia hierarquia organizacional e convites.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 import re
 
@@ -200,7 +201,7 @@ def is_member_of(db: Session, user_id: UUID, org_unit_id: UUID) -> bool:
 
 
 def can_user_create_child(
-    db: Session, user_id: UUID, parent_unit: OrgUnit, child_type: OrgUnitType
+    db: Session, user_id: UUID, parent_unit: OrgUnit | None, child_type: OrgUnitType
 ) -> bool:
     """
     Verifica se usuário pode criar filho do tipo especificado.
@@ -657,7 +658,7 @@ def update_member_role(
                 OrgMembership.role == OrgRoleCode.COORDINATOR,
                 OrgMembership.status == MembershipStatus.ACTIVE,
             )
-        ).scalar()
+        ).scalar() or 0
 
         if coord_count <= 1:
             raise OrgServiceError(
@@ -733,7 +734,7 @@ def remove_member(
                 OrgMembership.role == OrgRoleCode.COORDINATOR,
                 OrgMembership.status == MembershipStatus.ACTIVE,
             )
-        ).scalar()
+        ).scalar() or 0
 
         if coord_count <= 1:
             raise OrgServiceError(
@@ -760,7 +761,7 @@ def remove_member(
     db.commit()
 
 
-def get_user_permissions(db: Session, user_id: UUID, org_unit_id: UUID) -> dict:
+def get_user_permissions(db: Session, user_id: UUID, org_unit_id: UUID) -> dict[str, Any]:
     """
     Retorna permissões do usuário em uma unidade.
     """
@@ -779,10 +780,10 @@ def get_user_permissions(db: Session, user_id: UUID, org_unit_id: UUID) -> dict:
     )
 
     # Verifica o que pode criar
-    can_create = []
+    can_create: list[Any] = []
     if is_coord or is_admin:
         permissions = HIERARCHY_PERMISSIONS.get(org_unit.type.value, {})
-        can_create = permissions.get("can_create", [])
+        can_create = list(permissions.get("can_create", []))
 
     return {
         "can_view": org_unit.visibility == Visibility.PUBLIC or is_memb or is_admin,

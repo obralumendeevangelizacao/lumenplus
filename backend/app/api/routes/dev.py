@@ -5,6 +5,7 @@ Endpoints para testes e seed de dados.
 DESABILITAR EM PRODUÇÃO!
 """
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/dev", tags=["dev"])
 
 
 @router.post("/seed")
-async def seed_database(db: Session = Depends(get_db)):
+async def seed_database(db: Session = Depends(get_db)) -> Any:
     """Popula banco com dados iniciais."""
     results = {
         "global_roles": 0,
@@ -50,7 +51,7 @@ async def seed_database(db: Session = Depends(get_db)):
         ("ANALISTA", "Analista"),
     ]
     for code, name in roles:
-        existing = db.execute(
+        existing: Any = db.execute(
             select(GlobalRole).where(GlobalRole.code == code)
         ).scalar_one_or_none()
         if not existing:
@@ -144,7 +145,7 @@ async def create_conselho_geral(
     name: str = "Conselho Geral Lumen Christi",
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> Any:
     """Cria o Conselho Geral (raiz da hierarquia). Requer role DEV."""
     # Verifica se é DEV
     is_dev = any(ugr.global_role.code == "DEV" for ugr in user.global_roles)
@@ -205,7 +206,7 @@ async def assign_global_role(
     role_code: str,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> Any:
     """Atribui role global a um usuário. Requer role DEV."""
     # Verifica se é DEV
     is_dev = any(ugr.global_role.code == "DEV" for ugr in user.global_roles)
@@ -253,7 +254,7 @@ async def assign_global_role(
 async def make_me_dev(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> Any:
     """Torna o usuário atual DEV (APENAS para primeiro setup)."""
     # Busca role DEV
     role = db.execute(select(GlobalRole).where(GlobalRole.code == "DEV")).scalar_one_or_none()
@@ -286,7 +287,7 @@ async def make_me_dev(
 async def grant_inbox_permission(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> Any:
     """Dá permissão para enviar avisos ao usuário atual."""
     from app.db.models import UserPermission
     from app.services.inbox_service import PERMISSION_SEND_INBOX
@@ -321,7 +322,7 @@ async def grant_inbox_permission(
 async def revoke_inbox_permission(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-):
+) -> Any:
     """Remove permissão de enviar avisos do usuário atual."""
     from app.db.models import UserPermission
     from app.services.inbox_service import PERMISSION_SEND_INBOX

@@ -10,6 +10,7 @@ POST /retreats/{id}/my-registration/payment — enviar comprovante de pagamento
 
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 import cloudinary
@@ -62,7 +63,7 @@ FEE_CATEGORY_LABELS = {
 # ---------------------------------------------------------------------------
 
 
-def _is_retreat_manager(db, user_id: UUID) -> bool:
+def _is_retreat_manager(db: Any, user_id: UUID) -> bool:
     from app.db.models import GlobalRole, UserGlobalRole
 
     roles = (
@@ -85,7 +86,7 @@ def _is_retreat_manager(db, user_id: UUID) -> bool:
     return perm is not None
 
 
-def _user_eligible_for_retreat(db, user_id: UUID, retreat: Retreat) -> bool:
+def _user_eligible_for_retreat(db: Any, user_id: UUID, retreat: Retreat) -> bool:
     if retreat.visibility_type == RetreatVisibilityType.ALL:
         return True
 
@@ -151,7 +152,7 @@ def _compute_fee_category(
     return prefix
 
 
-def _get_user_voc_code(db, user_id: UUID) -> str | None:
+def _get_user_voc_code(db: Any, user_id: UUID) -> str | None:
     profile = db.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)
     ).scalar_one_or_none()
@@ -162,13 +163,13 @@ def _get_user_voc_code(db, user_id: UUID) -> str | None:
             )
         ).scalar_one_or_none()
         if item:
-            return item.code
+            return str(item.code)
     return None
 
 
 def _get_user_fee_info(
-    db, user_id: UUID, retreat: Retreat, modality: str | None = None
-) -> dict | None:
+    db: Any, user_id: UUID, retreat: Retreat, modality: str | None = None
+) -> dict[str, Any] | None:
     """
     Retorna a taxa esperada do usuário para o retiro.
     Se modalidade = HÍBRIDO, retorna a taxa HIBRIDO independente de perfil.
@@ -189,7 +190,7 @@ def _get_user_fee_info(
     }
 
 
-def _user_eligible_as_service(db, user_id: UUID, retreat: Retreat) -> bool:
+def _user_eligible_as_service(db: Any, user_id: UUID, retreat: Retreat) -> bool:
     """Verifica se o usuário é elegível para a equipe de serviço."""
     service_rules = [r for r in (retreat.eligibility_rules or []) if r.rule_group == "SERVICE"]
     if not service_rules:
@@ -237,10 +238,10 @@ def _available_modalities(retreat: Retreat) -> list[str]:
 def _retreat_to_dict(
     retreat: Retreat,
     registration: RetreatRegistration | None = None,
-    user_fee_info: dict | None = None,
+    user_fee_info: dict[str, Any] | None = None,
     eligible_as_participant: bool = True,
     eligible_as_service: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     result = {
         "id": str(retreat.id),
         "title": retreat.title,
@@ -306,7 +307,7 @@ def _retreat_to_dict(
     return result
 
 
-def _spots_available(db, retreat: Retreat, modality: str | None = None) -> bool:
+def _spots_available(db: Any, retreat: Retreat, modality: str | None = None) -> bool:
     """Verifica vagas globais e, se informado, vagas por modalidade."""
     active_regs = [r for r in retreat.registrations if r.status != RegistrationStatus.CANCELLED]
 
@@ -335,7 +336,7 @@ def _spots_available(db, retreat: Retreat, modality: str | None = None) -> bool:
 
 
 @router.get("")
-async def list_retreats(current_user: CurrentUser, db: DBSession):
+async def list_retreats(current_user: CurrentUser, db: DBSession) -> Any:
     """Lista retiros publicados visíveis para o usuário logado."""
     retreats = (
         db.execute(select(Retreat).where(Retreat.status == RetreatStatus.PUBLISHED)).scalars().all()
@@ -360,7 +361,7 @@ async def list_retreats(current_user: CurrentUser, db: DBSession):
 
 
 @router.get("/{retreat_id}")
-async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     """Detalhe do retiro + status da minha inscrição + minha taxa."""
     retreat = db.get(Retreat, retreat_id)
     if not retreat or retreat.status not in (RetreatStatus.PUBLISHED, RetreatStatus.CLOSED):
@@ -388,7 +389,7 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
 
 
 @router.get("/{retreat_id}/service-teams")
-async def list_retreat_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def list_retreat_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     """Lista equipes de serviço disponíveis para o inscrito escolher suas preferências."""
     retreat = db.get(Retreat, retreat_id)
     if not retreat or retreat.status not in (RetreatStatus.PUBLISHED, RetreatStatus.CLOSED):
@@ -423,7 +424,7 @@ class RegisterBody(BaseModel):
 @router.post("/{retreat_id}/register", status_code=201)
 async def register_for_retreat(
     retreat_id: UUID, body: RegisterBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Inscreve o usuário no retiro como PARTICIPANTE ou EQUIPE_SERVICO."""
     retreat = db.get(Retreat, retreat_id)
     if not retreat or retreat.status != RetreatStatus.PUBLISHED:
@@ -586,7 +587,7 @@ async def register_for_retreat(
 
 
 @router.delete("/{retreat_id}/my-registration", status_code=200)
-async def cancel_my_registration(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def cancel_my_registration(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     reg = db.execute(
         select(RetreatRegistration).where(
             RetreatRegistration.retreat_id == retreat_id,
@@ -613,7 +614,7 @@ async def submit_payment_proof(
     current_user: CurrentUser,
     db: DBSession,
     file: UploadFile = File(...),
-):
+) -> Any:
     """Envia o comprovante de pagamento (imagem) para o Cloudinary."""
     reg = db.execute(
         select(RetreatRegistration).where(

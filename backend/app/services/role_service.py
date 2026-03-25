@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.db.models import GlobalRole, OrgMembership, OrgRole, UserGlobalRole, MembershipStatus
+from app.db.models import GlobalRole, OrgMembership, OrgRoleCode, UserGlobalRole, MembershipStatus
 
 
 class RoleService:
@@ -50,17 +50,12 @@ class RoleService:
 
     def is_coordinator_of(self, user_id: UUID, org_unit_id: UUID) -> bool:
         """Verifica se usuário é coordenador de uma unidade organizacional."""
-        coordinator_role = self.db.query(OrgRole).filter(OrgRole.code == "COORDINATOR").first()
-
-        if not coordinator_role:
-            return False
-
         membership = (
             self.db.query(OrgMembership)
             .filter(
                 OrgMembership.user_id == user_id,
                 OrgMembership.org_unit_id == org_unit_id,
-                OrgMembership.org_role_id == coordinator_role.id,
+                OrgMembership.role == OrgRoleCode.COORDINATOR,
                 OrgMembership.status == MembershipStatus.ACTIVE,
             )
             .first()

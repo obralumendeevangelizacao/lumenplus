@@ -1287,7 +1287,7 @@ class LifePlanCycle(Base):
     )
     status: Mapped[str] = mapped_column(Text, nullable=False, default="DRAFT")
     realidade_vocacional: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    wizard_progress: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    wizard_progress: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     started_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     ended_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
