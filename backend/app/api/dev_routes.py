@@ -7,7 +7,9 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, DBSession
 from app.audit.service import create_audit_log
-from app.db.models import OrgRole, OrgUnit, OrgUnitType
+from typing import Any
+
+from app.db.models import OrgRoleCode, OrgUnit, OrgUnitType
 
 router = APIRouter(prefix="/dev", tags=["Development"])
 
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/dev", tags=["Development"])
 # =============================================================================
 # Models for Phase 1 (imported dynamically to avoid circular imports)
 # =============================================================================
-def get_phase1_models():
+def get_phase1_models() -> dict[str, Any] | None:
     """Get Phase 1 models if they exist."""
     try:
         from app.db.models import (
@@ -75,20 +77,20 @@ async def create_org_unit(
             detail={"error": "conflict", "message": f"Slug already exists: {body.slug}"},
         )
 
-    if org_type == OrgUnitType.MINISTRY:
+    if org_type == OrgUnitType.MINISTERIO:
         if not body.parent_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "bad_request", "message": "MINISTRY requires a parent_id"},
             )
         parent = db.query(OrgUnit).filter(OrgUnit.id == body.parent_id).first()
-        if not parent or parent.type != OrgUnitType.SECTOR:
+        if not parent or parent.type != OrgUnitType.SETOR:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"error": "bad_request", "message": "MINISTRY parent must be a SECTOR"},
             )
 
-    if org_type == OrgUnitType.SECTOR and body.parent_id:
+    if org_type == OrgUnitType.SETOR and body.parent_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"error": "bad_request", "message": "SECTOR cannot have a parent"},
@@ -149,19 +151,9 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
     legal_docs_created = 0
 
     # =========================================================================
-    # PHASE 0: Org Roles
+    # PHASE 0: Org Roles (OrgRoleCode is an enum — no DB table to seed)
     # =========================================================================
-    existing_roles = {r.code for r in db.query(OrgRole).all()}
-    default_roles = [
-        {"code": "MEMBER", "name": "Membro"},
-        {"code": "COORDINATOR", "name": "Coordenador"},
-    ]
-    for role_data in default_roles:
-        if role_data["code"] not in existing_roles:
-            role = OrgRole(code=role_data["code"], name=role_data["name"])
-            db.add(role)
-            roles_created += 1
-    db.flush()
+    # roles_created remains 0 — OrgRoleCode is a Python enum, not a DB model
 
     # =========================================================================
     # PHASE 0: Org Units
@@ -169,46 +161,46 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
     existing_slugs = {u.slug for u in db.query(OrgUnit).all()}
     sample_data = [
         {
-            "type": OrgUnitType.SECTOR,
+            "type": OrgUnitType.SETOR,
             "name": "Setor de Formação",
             "slug": "formacao",
             "parent": None,
         },
         {
-            "type": OrgUnitType.SECTOR,
+            "type": OrgUnitType.SETOR,
             "name": "Setor de Liturgia",
             "slug": "liturgia",
             "parent": None,
         },
         {
-            "type": OrgUnitType.MINISTRY,
+            "type": OrgUnitType.MINISTERIO,
             "name": "Ministério de Catequese",
             "slug": "catequese",
             "parent": "formacao",
         },
         {
-            "type": OrgUnitType.MINISTRY,
+            "type": OrgUnitType.MINISTERIO,
             "name": "Ministério de Casais",
             "slug": "casais",
             "parent": "formacao",
         },
         {
-            "type": OrgUnitType.MINISTRY,
+            "type": OrgUnitType.MINISTERIO,
             "name": "Ministério de Música",
             "slug": "musica",
             "parent": "liturgia",
         },
-        {"type": OrgUnitType.GROUP, "name": "Grupo de Jovens", "slug": "jovens", "parent": None},
-        {"type": OrgUnitType.GROUP, "name": "Grupo de Oração", "slug": "oracao", "parent": None},
+        {"type": OrgUnitType.GRUPO, "name": "Grupo de Jovens", "slug": "jovens", "parent": None},
+        {"type": OrgUnitType.GRUPO, "name": "Grupo de Oração", "slug": "oracao", "parent": None},
     ]
     slug_to_id: dict[str, UUID] = {}
     for item in sample_data:
         if item["slug"] in existing_slugs:
             existing = db.query(OrgUnit).filter(OrgUnit.slug == item["slug"]).first()
             if existing:
-                slug_to_id[item["slug"]] = existing.id
+                slug_to_id[str(item["slug"])] = existing.id
             continue
-        parent_id = slug_to_id.get(item["parent"]) if item["parent"] else None
+        parent_id = slug_to_id.get(str(item["parent"])) if item["parent"] else None
         org_unit = OrgUnit(
             type=item["type"],
             name=item["name"],
@@ -219,7 +211,7 @@ async def seed_data(request: Request, db: DBSession, current_user: CurrentUser) 
         )
         db.add(org_unit)
         db.flush()
-        slug_to_id[item["slug"]] = org_unit.id
+        slug_to_id[str(item["slug"])] = org_unit.id
         units_created += 1
 
     # =========================================================================

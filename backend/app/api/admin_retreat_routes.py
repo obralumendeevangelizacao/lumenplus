@@ -23,12 +23,15 @@ GET    /admin/retreats/{id}/export                             — exportar CSV
 import csv
 import io
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
+
+from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import (
@@ -83,7 +86,7 @@ ALL_FEE_CATEGORIES = list(FEE_CATEGORY_LABELS.keys())
 # ---------------------------------------------------------------------------
 
 
-def _is_global_retreat_manager(db, user_id: UUID) -> bool:
+def _is_global_retreat_manager(db: Session, user_id: UUID) -> bool:
     """Verifica se o usuário é gestor de retiros.
     Critérios: ADMIN/DEV, PERMISSION_MANAGE_RETREATS ou membro ativo de unidade com retreat_scope=True.
     """
@@ -119,7 +122,7 @@ def _is_global_retreat_manager(db, user_id: UUID) -> bool:
     return retreat_membership is not None
 
 
-def _require_retreat_manager(db, user_id: UUID, retreat_id: UUID | None = None) -> None:
+def _require_retreat_manager(db: Session, user_id: UUID, retreat_id: UUID | None = None) -> None:
     """
     Exige que o usuário seja gestor de retiro.
     - Sem retreat_id: apenas gestores globais (ADMIN/DEV/PERMISSION_MANAGE_RETREATS).
@@ -142,7 +145,7 @@ def _require_retreat_manager(db, user_id: UUID, retreat_id: UUID | None = None) 
     )
 
 
-def _houses_to_list(houses) -> list[dict]:
+def _houses_to_list(houses: Any) -> list[dict[str, Any]]:
     return [
         {
             "id": str(h.id),
@@ -154,7 +157,7 @@ def _houses_to_list(houses) -> list[dict]:
     ]
 
 
-def _fee_types_to_list(fee_types) -> list[dict]:
+def _fee_types_to_list(fee_types: Any) -> list[dict[str, Any]]:
     return [
         {
             "id": str(ft.id),
@@ -166,7 +169,7 @@ def _fee_types_to_list(fee_types) -> list[dict]:
     ]
 
 
-def _service_teams_to_list(teams) -> list[dict]:
+def _service_teams_to_list(teams: Any) -> list[dict[str, Any]]:
     result = []
     for team in teams or []:
         members = []
@@ -200,7 +203,7 @@ def _service_teams_to_list(teams) -> list[dict]:
     return result
 
 
-def _rule_to_dict(r) -> dict:
+def _rule_to_dict(r: Any) -> dict[str, Any]:
     return {
         "id": str(r.id),
         "rule_type": r.rule_type.value,
@@ -211,7 +214,7 @@ def _rule_to_dict(r) -> dict:
     }
 
 
-def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> dict:
+def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> dict[str, Any]:
     all_rules = retreat.eligibility_rules or []
     participant_rules = [_rule_to_dict(r) for r in all_rules if r.rule_group == "PARTICIPANT"]
     service_rules = [_rule_to_dict(r) for r in all_rules if r.rule_group == "SERVICE"]
@@ -259,7 +262,7 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
     return result
 
 
-def _notify_eligible_users(db, retreat: Retreat) -> None:
+def _notify_eligible_users(db: Session, retreat: Retreat) -> None:
     """Envia aviso no inbox para todos os usuários elegíveis ao publicar um retiro."""
     if retreat.visibility_type == RetreatVisibilityType.ALL:
         users = db.execute(select(User).where(User.is_active)).scalars().all()
@@ -437,7 +440,7 @@ class PatchTeamMemberBody(BaseModel):
 
 
 @router.post("", status_code=201)
-async def create_retreat(body: CreateRetreatBody, current_user: CurrentUser, db: DBSession):
+async def create_retreat(body: CreateRetreatBody, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id)
 
     try:
@@ -484,7 +487,7 @@ async def create_retreat(body: CreateRetreatBody, current_user: CurrentUser, db:
 
 
 @router.get("")
-async def list_retreats(current_user: CurrentUser, db: DBSession):
+async def list_retreats(current_user: CurrentUser, db: DBSession) -> Any:
     if _is_global_retreat_manager(db, current_user.id):
         # Gestores globais veem todos os retiros
         retreats = db.execute(select(Retreat)).scalars().all()
@@ -511,7 +514,7 @@ async def list_retreats(current_user: CurrentUser, db: DBSession):
 
 
 @router.get("/{retreat_id}")
-async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -524,7 +527,7 @@ async def get_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession
 @router.patch("/{retreat_id}")
 async def update_retreat(
     retreat_id: UUID, body: PatchRetreatBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -614,7 +617,7 @@ async def update_retreat(
 
 
 @router.post("/{retreat_id}/publish")
-async def publish_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def publish_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -637,7 +640,7 @@ async def publish_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSes
 
 
 @router.post("/{retreat_id}/close")
-async def close_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def close_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -658,7 +661,7 @@ async def close_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSessi
 
 
 @router.post("/{retreat_id}/cancel")
-async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -681,7 +684,7 @@ async def cancel_retreat(retreat_id: UUID, current_user: CurrentUser, db: DBSess
 
 
 @router.post("/{retreat_id}/houses", status_code=201)
-async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession):
+async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -717,7 +720,7 @@ async def add_house(retreat_id: UUID, body: HouseBody, current_user: CurrentUser
 @router.put("/{retreat_id}/houses/{house_id}")
 async def update_house(
     retreat_id: UUID, house_id: UUID, body: HouseBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     house = db.get(RetreatHouse, house_id)
     if not house or house.retreat_id != retreat_id:
@@ -747,7 +750,7 @@ async def update_house(
 
 
 @router.delete("/{retreat_id}/houses/{house_id}", status_code=200)
-async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUser, db: DBSession):
+async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     house = db.get(RetreatHouse, house_id)
     if not house or house.retreat_id != retreat_id:
@@ -767,7 +770,7 @@ async def delete_house(retreat_id: UUID, house_id: UUID, current_user: CurrentUs
 @router.post("/{retreat_id}/eligibility-rules", status_code=201)
 async def add_eligibility_rule(
     retreat_id: UUID, body: AddEligibilityRuleBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Adiciona uma regra de elegibilidade ao retiro (PARTICIPANT ou SERVICE)."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
@@ -810,7 +813,7 @@ async def add_eligibility_rule(
 @router.delete("/{retreat_id}/eligibility-rules/{rule_id}", status_code=200)
 async def delete_eligibility_rule(
     retreat_id: UUID, rule_id: UUID, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Remove uma regra de elegibilidade do retiro."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     rule = db.get(RetreatEligibilityRule, rule_id)
@@ -831,7 +834,7 @@ async def delete_eligibility_rule(
 @router.post("/{retreat_id}/fee-types")
 async def set_fee_types(
     retreat_id: UUID, body: SetFeeTypesBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Substitui todas as taxas do retiro (bulk upsert)."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
@@ -857,19 +860,19 @@ async def set_fee_types(
         .scalars()
         .all()
     )
-    for ft in existing:
-        db.delete(ft)
+    for existing_ft in existing:
+        db.delete(existing_ft)
     db.flush()
 
     created = []
     for ft_input in body.fee_types:
-        ft = RetreatFeeType(
+        new_ft = RetreatFeeType(
             retreat_id=retreat_id,
             fee_category=ft_input.fee_category,
             amount_brl=ft_input.amount_brl,
         )
-        db.add(ft)
-        created.append(ft)
+        db.add(new_ft)
+        created.append(new_ft)
 
     db.commit()
     return {
@@ -890,7 +893,7 @@ async def set_fee_types(
 
 
 @router.get("/{retreat_id}/registrations")
-async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -958,7 +961,7 @@ async def list_registrations(retreat_id: UUID, current_user: CurrentUser, db: DB
 @router.post("/{retreat_id}/registrations/{registration_id}/confirm")
 async def confirm_payment(
     retreat_id: UUID, registration_id: UUID, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
     if not reg or reg.retreat_id != retreat_id:
@@ -988,7 +991,7 @@ async def reject_payment(
     body: RejectBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
     if not reg or reg.retreat_id != retreat_id:
@@ -1021,7 +1024,7 @@ async def assign_house(
     body: AssignHouseBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Atribui (ou remove) uma casa a uma inscrição."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     reg = db.get(RetreatRegistration, registration_id)
@@ -1050,7 +1053,7 @@ async def set_registration_role(
     body: SetRoleBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """Muda o papel do participante (PARTICIPANTE ou EQUIPE_SERVICO) e recalcula fee_category."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     if body.retreat_role not in ("PARTICIPANTE", "EQUIPE_SERVICO"):
@@ -1133,7 +1136,7 @@ async def create_service_team(
     body: CreateServiceTeamBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -1156,7 +1159,7 @@ async def create_service_team(
 
 
 @router.get("/{retreat_id}/service-teams")
-async def list_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def list_service_teams(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -1178,7 +1181,7 @@ async def update_service_team(
     body: PatchServiceTeamBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
@@ -1202,7 +1205,7 @@ async def update_service_team(
 @router.delete("/{retreat_id}/service-teams/{team_id}", status_code=200)
 async def delete_service_team(
     retreat_id: UUID, team_id: UUID, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
@@ -1221,7 +1224,7 @@ async def assign_team_member(
     body: AssignTeamMemberBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
@@ -1289,7 +1292,7 @@ async def patch_team_member(
     body: PatchTeamMemberBody,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
@@ -1336,7 +1339,7 @@ async def remove_team_member(
     member_id: UUID,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     team = db.get(RetreatServiceTeam, team_id)
     if not team or team.retreat_id != retreat_id:
@@ -1363,7 +1366,7 @@ class AddCoordinatorBody(BaseModel):
 
 
 @router.get("/{retreat_id}/coordinators")
-async def list_coordinators(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def list_coordinators(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     """Lista coordenadores do retiro. Requer gestor global ou ser coordenador do retiro."""
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
@@ -1391,7 +1394,7 @@ async def list_coordinators(retreat_id: UUID, current_user: CurrentUser, db: DBS
 @router.post("/{retreat_id}/coordinators", status_code=201)
 async def add_coordinator(
     retreat_id: UUID, body: AddCoordinatorBody, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Atribui cargo de coordenador do retiro a um usuário. Requer gestor GLOBAL."""
     if not _is_global_retreat_manager(db, current_user.id):
         raise HTTPException(
@@ -1450,7 +1453,7 @@ async def add_coordinator(
 @router.delete("/{retreat_id}/coordinators/{coordinator_id}", status_code=200)
 async def remove_coordinator(
     retreat_id: UUID, coordinator_id: UUID, current_user: CurrentUser, db: DBSession
-):
+) -> Any:
     """Remove cargo de coordenador do retiro. Requer gestor GLOBAL."""
     if not _is_global_retreat_manager(db, current_user.id):
         raise HTTPException(
@@ -1476,7 +1479,7 @@ async def remove_coordinator(
 
 
 @router.get("/{retreat_id}/export")
-async def export_registrations_csv(retreat_id: UUID, current_user: CurrentUser, db: DBSession):
+async def export_registrations_csv(retreat_id: UUID, current_user: CurrentUser, db: DBSession) -> Any:
     _require_retreat_manager(db, current_user.id, retreat_id)
     retreat = db.get(Retreat, retreat_id)
     if not retreat:
@@ -1523,7 +1526,7 @@ async def export_registrations_csv(retreat_id: UUID, current_user: CurrentUser, 
                 reg.status.value,
                 reg.modality_preference or "",
                 reg.retreat_role or "PARTICIPANTE",
-                FEE_CATEGORY_LABELS.get(reg.fee_category, reg.fee_category or ""),
+                FEE_CATEGORY_LABELS.get(reg.fee_category or "", reg.fee_category or ""),
                 house.name if house else "",
                 reg.notes or "",
                 reg.payment_submitted_at.strftime("%d/%m/%Y %H:%M")

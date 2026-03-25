@@ -41,6 +41,8 @@ from app.settings import settings
 # Re-export para compatibilidade com módulos que importam daqui
 from app.api.deps import get_current_user, CurrentUser  # noqa: F401
 
+__all__ = ["get_current_user", "CurrentUser"]
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -50,7 +52,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthResponse)
-async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+async def register(data: RegisterRequest, db: Session = Depends(get_db)) -> AuthResponse:
     """Registra novo usuário (somente em modo DEV)."""
     # SEGURANÇA: verificar modo ANTES de qualquer operação no banco.
     # Em PROD, usuários são provisionados automaticamente via Firebase Auth
@@ -103,7 +105,7 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(data: LoginRequest, db: Session = Depends(get_db)):
+async def login(data: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
     """Login do usuário."""
     if settings.auth_mode != "DEV":
         # Em PROD, /auth/login não está implementado — use Firebase Auth diretamente
@@ -139,7 +141,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
 async def get_me(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> UserMeResponse:
     """Retorna dados do usuário autenticado."""
     # Identities
     identities = [
@@ -265,7 +267,7 @@ async def get_me(
 async def delete_me(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> None:
     """
     Exclusão de conta — LGPD art. 18, VI (eliminação de dados).
 

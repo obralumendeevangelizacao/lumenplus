@@ -5,9 +5,11 @@ Serviço para gerenciamento de avisos/inbox.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, func, and_, update, text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.models import (
@@ -115,7 +117,7 @@ class InboxService:
         rows = self.db.execute(cte_sql, {"root_id": str(org_unit_id)}).fetchall()
         return [row[0] for row in rows]
 
-    def get_sendable_scopes(self, user_id: UUID) -> dict:
+    def get_sendable_scopes(self, user_id: UUID) -> dict[str, Any]:
         """
         Retorna os escopos disponíveis para envio de aviso:
         - can_send_to_all: True se tem CAN_SEND_INBOX
@@ -166,7 +168,7 @@ class InboxService:
 
     def get_user_inbox(
         self, user_id: UUID, include_read: bool = True, limit: int = 50, offset: int = 0
-    ) -> tuple[list[dict], int, int]:
+    ) -> tuple[list[dict[str, Any]], int, int]:
         """
         Retorna mensagens do inbox do usuário.
         Returns: (messages, total, unread_count)
@@ -181,7 +183,7 @@ class InboxService:
         )
 
         if not include_read:
-            base_query = base_query.where(not InboxRecipient.read)
+            base_query = base_query.where(InboxRecipient.read.is_(False))
 
         # Ordenar por não lidos primeiro, depois por data
         base_query = base_query.order_by(InboxRecipient.read.asc(), InboxMessage.created_at.desc())
@@ -196,7 +198,7 @@ class InboxService:
         total = self.db.execute(count_query).scalar() or 0
 
         # Contar não lidos
-        unread_query = count_query.where(not InboxRecipient.read)
+        unread_query = count_query.where(InboxRecipient.read.is_(False))
         unread_count = self.db.execute(unread_query).scalar() or 0
 
         # Buscar mensagens
@@ -234,7 +236,7 @@ class InboxService:
 
         return messages, total, unread_count
 
-    def get_unread_messages(self, user_id: UUID, limit: int = 10) -> list[dict]:
+    def get_unread_messages(self, user_id: UUID, limit: int = 10) -> list[dict[str, Any]]:
         """Retorna apenas mensagens não lidas."""
         messages, _, _ = self.get_user_inbox(user_id, include_read=False, limit=limit)
         return messages
@@ -279,13 +281,13 @@ class InboxService:
             .join(InboxMessage, InboxRecipient.message_id == InboxMessage.id)
             .where(
                 InboxRecipient.user_id == user_id,
-                not InboxRecipient.read,
+                InboxRecipient.read.is_(False),
                 InboxMessage.expires_at > now,
             )
         )
 
         # UPDATE único — uma roundtrip ao banco independente do volume
-        result = self.db.execute(
+        cursor_result: CursorResult[Any] = self.db.execute(
             update(InboxRecipient)
             .where(InboxRecipient.id.in_(eligible_ids_subq))
             .values(read=True, read_at=now)
@@ -293,11 +295,11 @@ class InboxService:
         )
 
         self.db.commit()
-        return result.rowcount
+        return cursor_result.rowcount
 
     # === ENVIO DE AVISOS ===
 
-    def get_filter_options(self) -> dict:
+    def get_filter_options(self) -> dict[str, Any]:
         """Retorna opções disponíveis para filtros de segmentação."""
         # Realidades vocacionais
         vocational = (
@@ -403,7 +405,7 @@ class InboxService:
           3. filters (perfil) → subconjunto filtrado
         Filtros de perfil são aplicados cumulativamente sobre o escopo.
         """
-        conditions = [User.is_active]
+        conditions: list[Any] = [User.is_active]
         query = select(User.id).join(UserProfile, User.id == UserProfile.user_id, isouter=True)
 
         if scope_org_unit_id:
@@ -468,7 +470,7 @@ class InboxService:
         created_by_user_id: UUID,
         send_to_all: bool,
         filters: InboxFilters | None = None,
-        attachments: list[dict] | None = None,
+        attachments: list[dict[str, Any]] | None = None,
         scope_org_unit_id: UUID | None = None,
     ) -> tuple[UUID, int]:
         """
@@ -510,7 +512,7 @@ class InboxService:
 
         return inbox_message.id, len(user_ids)
 
-    def get_sent_messages(self, user_id: UUID, limit: int = 20) -> list[dict]:
+    def get_sent_messages(self, user_id: UUID, limit: int = 20) -> list[dict[str, Any]]:
         """Retorna mensagens enviadas por um usuário."""
         messages = (
             self.db.execute(
