@@ -25,7 +25,8 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { auth } from '@/config/firebase';
+import { auth, IS_DEV_AUTH } from '@/config/firebase';
+import api, { setDevToken } from '@/services/api';
 
 const colors = {
   primary: '#1A859B',
@@ -44,7 +45,7 @@ export default function LoginScreen() {
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!email.includes('@')) newErrors.email = 'Email inválido';
-    if (!password) newErrors.password = 'Digite sua senha';
+    if (!IS_DEV_AUTH && !password) newErrors.password = 'Digite sua senha';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -53,9 +54,27 @@ export default function LoginScreen() {
     if (!validate()) return;
     try {
       setIsLoading(true);
+
+      if (IS_DEV_AUTH) {
+        // Modo DEV: autentica diretamente no backend (sem Firebase)
+        const res = await fetch(`${api.baseUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password: 'dev-password' }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const msg = err?.detail?.message ?? 'Usuário não encontrado. Crie uma conta primeiro.';
+          Alert.alert('Erro ao entrar', msg);
+          return;
+        }
+        const data = await res.json();
+        await setDevToken(data.access_token);
+        router.replace('/(tabs)/home');
+        return;
+      }
+
       await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      // Firebase gerencia o token — o backend provisiona o usuário
-      // na primeira requisição autenticada via deps.py
       router.replace('/(tabs)/home');
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? '';
@@ -71,6 +90,10 @@ export default function LoginScreen() {
   };
 
   const handleForgotPassword = async () => {
+    if (IS_DEV_AUTH) {
+      Alert.alert('Modo DEV', 'Recuperação de senha não disponível em modo de desenvolvimento.');
+      return;
+    }
     if (!email.includes('@')) {
       setErrors({ email: 'Digite seu email acima primeiro' });
       return;

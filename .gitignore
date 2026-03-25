@@ -71,3 +71,6 @@ strapi/node_modules/
 .cache/
 
 .claude/
+
+# Python egg-info
+*.egg-info/

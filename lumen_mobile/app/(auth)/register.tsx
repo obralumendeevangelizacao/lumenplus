@@ -20,8 +20,9 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth } from '@/config/firebase';
+import { auth, IS_DEV_AUTH } from '@/config/firebase';
 import { profileService } from '@/services';
+import api, { setDevToken } from '@/services/api';
 import type { CatalogItem } from '@/types';
 
 const DESPERTAR_ENCOUNTERS = [
@@ -197,11 +198,33 @@ export default function RegisterScreen() {
     setFirebaseError('');
     setIsLoading(true);
     try {
-      // 1. Cria conta Firebase
-      const credential = await createUserWithEmailAndPassword(
-        auth, email.trim().toLowerCase(), password,
-      );
-      await updateProfile(credential.user, { displayName: fullName.trim() });
+      if (IS_DEV_AUTH) {
+        // Modo DEV: cria conta diretamente no backend (sem Firebase)
+        const res = await fetch(`${api.baseUrl}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase(), full_name: fullName.trim(), password: 'dev-password' }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const msg = err?.detail?.message ?? 'Erro ao criar conta.';
+          if (err?.detail?.error === 'email_exists') {
+            setFirebaseError('Este email já está cadastrado. Tente fazer login.');
+            setStep(1);
+          } else {
+            setFirebaseError(msg);
+          }
+          return;
+        }
+        const data = await res.json();
+        await setDevToken(data.access_token);
+      } else {
+        // 1. Cria conta Firebase
+        const credential = await createUserWithEmailAndPassword(
+          auth, email.trim().toLowerCase(), password,
+        );
+        await updateProfile(credential.user, { displayName: fullName.trim() });
+      }
 
       // 2. Monta data ISO e telefone E.164
       const [dd, mm, yyyy] = birthDate.split('/');
