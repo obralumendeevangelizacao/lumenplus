@@ -8,9 +8,10 @@ Dados extremamente sensíveis.
 """
 
 from datetime import date
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -63,7 +64,9 @@ def _load_cycle_full(db: DBSession, cycle_id: UUID, user_id: UUID) -> LifePlanCy
     )
     cycle = result.scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
     return cycle
 
 
@@ -71,7 +74,7 @@ def _load_cycle_full(db: DBSession, cycle_id: UUID, user_id: UUID) -> LifePlanCy
 
 
 @router.get("/me/active", response_model=CycleOut | None)
-def get_active_cycle(user: CurrentUser, db: DBSession):
+def get_active_cycle(user: CurrentUser, db: DBSession) -> Any:
     """Retorna o ciclo ACTIVE ou DRAFT do usuário, com todos os dados."""
     result = db.execute(
         select(LifePlanCycle)
@@ -94,7 +97,7 @@ def get_active_cycle(user: CurrentUser, db: DBSession):
 
 
 @router.post("/cycles", response_model=CycleOut, status_code=201)
-def create_cycle(body: CycleCreate, user: CurrentUser, db: DBSession):
+def create_cycle(body: CycleCreate, user: CurrentUser, db: DBSession) -> Any:
     """
     Cria um novo ciclo em status DRAFT.
     Falha se já existir um ciclo ACTIVE (partial unique index).
@@ -109,7 +112,10 @@ def create_cycle(body: CycleCreate, user: CurrentUser, db: DBSession):
     if existing:
         raise HTTPException(
             status_code=409,
-            detail={"error": "conflict", "message": "Já existe um ciclo ativo. Encerre-o antes de iniciar um novo."},
+            detail={
+                "error": "conflict",
+                "message": "Já existe um ciclo ativo. Encerre-o antes de iniciar um novo.",
+            },
         )
 
     cycle = LifePlanCycle(
@@ -124,7 +130,9 @@ def create_cycle(body: CycleCreate, user: CurrentUser, db: DBSession):
 
 
 @router.patch("/cycles/{cycle_id}/wizard-progress", response_model=CycleOut)
-def update_wizard_progress(cycle_id: UUID, body: WizardProgressUpdate, user: CurrentUser, db: DBSession):
+def update_wizard_progress(
+    cycle_id: UUID, body: WizardProgressUpdate, user: CurrentUser, db: DBSession
+) -> Any:
     """Salva progresso parcial do wizard sem avançar o status."""
     cycle = _load_cycle_full(db, cycle_id, user.id)
     cycle.wizard_progress = body.wizard_progress
@@ -134,13 +142,16 @@ def update_wizard_progress(cycle_id: UUID, body: WizardProgressUpdate, user: Cur
 
 
 @router.post("/cycles/{cycle_id}/activate", response_model=CycleOut)
-def activate_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession):
+def activate_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession) -> Any:
     """Ativa o ciclo (DRAFT → ACTIVE) e registra a data de início."""
     cycle = _load_cycle_full(db, cycle_id, user.id)
     if cycle.status != "DRAFT":
         raise HTTPException(
             status_code=400,
-            detail={"error": "invalid_state", "message": "Apenas ciclos em DRAFT podem ser ativados"},
+            detail={
+                "error": "invalid_state",
+                "message": "Apenas ciclos em DRAFT podem ser ativados",
+            },
         )
     cycle.status = "ACTIVE"
     cycle.started_at = date.today()
@@ -150,7 +161,7 @@ def activate_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession):
 
 
 @router.get("/history", response_model=list[CycleSummaryOut])
-def get_history(user: CurrentUser, db: DBSession):
+def get_history(user: CurrentUser, db: DBSession) -> Any:
     """Lista todos os ciclos do usuário (ARCHIVED + ACTIVE), ordenados por data."""
     result = db.execute(
         select(LifePlanCycle)
@@ -184,7 +195,7 @@ def get_history(user: CurrentUser, db: DBSession):
 
 
 @router.get("/cycles/{cycle_id}", response_model=CycleOut)
-def get_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession):
+def get_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession) -> Any:
     """Retorna um ciclo específico (inclusive ARCHIVED) com todos os dados."""
     return _load_cycle_full(db, cycle_id, user.id)
 
@@ -193,14 +204,16 @@ def get_cycle(cycle_id: UUID, user: CurrentUser, db: DBSession):
 
 
 @router.post("/cycles/{cycle_id}/diagnoses", response_model=DiagnosisOut)
-def upsert_diagnosis(cycle_id: UUID, body: DiagnosisUpsert, user: CurrentUser, db: DBSession):
+def upsert_diagnosis(cycle_id: UUID, body: DiagnosisUpsert, user: CurrentUser, db: DBSession) -> Any:
     """Cria ou atualiza o diagnóstico de uma dimensão do ciclo."""
     # Verificar ownership sem carregar tudo
     cycle = db.execute(
         select(LifePlanCycle).where(LifePlanCycle.id == cycle_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
 
     existing = db.execute(
         select(LifePlanDiagnosis).where(
@@ -234,13 +247,15 @@ def upsert_diagnosis(cycle_id: UUID, body: DiagnosisUpsert, user: CurrentUser, d
 
 
 @router.post("/cycles/{cycle_id}/core", response_model=CoreOut)
-def upsert_core(cycle_id: UUID, body: CoreUpsert, user: CurrentUser, db: DBSession):
+def upsert_core(cycle_id: UUID, body: CoreUpsert, user: CurrentUser, db: DBSession) -> Any:
     """Cria ou atualiza o núcleo do plano (defeito dominante, virtudes, etc.)."""
     cycle = db.execute(
         select(LifePlanCycle).where(LifePlanCycle.id == cycle_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
 
     existing = db.execute(
         select(LifePlanCore).where(LifePlanCore.cycle_id == cycle_id)
@@ -264,7 +279,7 @@ def upsert_core(cycle_id: UUID, body: CoreUpsert, user: CurrentUser, db: DBSessi
 
 
 @router.post("/cycles/{cycle_id}/goals", response_model=GoalOut, status_code=201)
-def create_goal(cycle_id: UUID, body: GoalCreate, user: CurrentUser, db: DBSession):
+def create_goal(cycle_id: UUID, body: GoalCreate, user: CurrentUser, db: DBSession) -> Any:
     """
     Cria um objetivo no ciclo.
     Restrições: 1 primário, máx 3 secundários.
@@ -273,24 +288,32 @@ def create_goal(cycle_id: UUID, body: GoalCreate, user: CurrentUser, db: DBSessi
         select(LifePlanCycle).where(LifePlanCycle.id == cycle_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
 
-    existing_goals = db.execute(
-        select(LifePlanGoal).where(LifePlanGoal.cycle_id == cycle_id)
-    ).scalars().all()
+    existing_goals = (
+        db.execute(select(LifePlanGoal).where(LifePlanGoal.cycle_id == cycle_id)).scalars().all()
+    )
 
     if body.is_primary:
         if any(g.is_primary for g in existing_goals):
             raise HTTPException(
                 status_code=409,
-                detail={"error": "conflict", "message": "Já existe um objetivo principal neste ciclo"},
+                detail={
+                    "error": "conflict",
+                    "message": "Já existe um objetivo principal neste ciclo",
+                },
             )
     else:
         secondary_count = sum(1 for g in existing_goals if not g.is_primary)
         if secondary_count >= 3:
             raise HTTPException(
                 status_code=422,
-                detail={"error": "limit_exceeded", "message": "Máximo de 3 objetivos secundários atingido"},
+                detail={
+                    "error": "limit_exceeded",
+                    "message": "Máximo de 3 objetivos secundários atingido",
+                },
             )
 
     goal = LifePlanGoal(
@@ -311,13 +334,15 @@ def create_goal(cycle_id: UUID, body: GoalCreate, user: CurrentUser, db: DBSessi
     db.refresh(goal)
 
     result = db.execute(
-        select(LifePlanGoal).where(LifePlanGoal.id == goal.id).options(selectinload(LifePlanGoal.actions))
+        select(LifePlanGoal)
+        .where(LifePlanGoal.id == goal.id)
+        .options(selectinload(LifePlanGoal.actions))
     )
     return result.scalar_one()
 
 
 @router.patch("/goals/{goal_id}", response_model=GoalOut)
-def update_goal(goal_id: UUID, body: GoalUpdate, user: CurrentUser, db: DBSession):
+def update_goal(goal_id: UUID, body: GoalUpdate, user: CurrentUser, db: DBSession) -> Any:
     """Atualiza um objetivo."""
     goal = db.execute(
         select(LifePlanGoal)
@@ -326,7 +351,9 @@ def update_goal(goal_id: UUID, body: GoalUpdate, user: CurrentUser, db: DBSessio
         .options(selectinload(LifePlanGoal.actions))
     ).scalar_one_or_none()
     if not goal:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"}
+        )
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(goal, field, value)
@@ -336,7 +363,7 @@ def update_goal(goal_id: UUID, body: GoalUpdate, user: CurrentUser, db: DBSessio
 
 
 @router.delete("/goals/{goal_id}", status_code=204)
-def delete_goal(goal_id: UUID, user: CurrentUser, db: DBSession):
+def delete_goal(goal_id: UUID, user: CurrentUser, db: DBSession) -> None:
     """Remove um objetivo e suas ações."""
     goal = db.execute(
         select(LifePlanGoal)
@@ -344,7 +371,9 @@ def delete_goal(goal_id: UUID, user: CurrentUser, db: DBSession):
         .where(LifePlanGoal.id == goal_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not goal:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"}
+        )
     db.delete(goal)
     db.commit()
 
@@ -353,7 +382,7 @@ def delete_goal(goal_id: UUID, user: CurrentUser, db: DBSession):
 
 
 @router.post("/goals/{goal_id}/actions", response_model=ActionOut, status_code=201)
-def create_action(goal_id: UUID, body: ActionCreate, user: CurrentUser, db: DBSession):
+def create_action(goal_id: UUID, body: ActionCreate, user: CurrentUser, db: DBSession) -> Any:
     """Adiciona um meio concreto a um objetivo."""
     goal = db.execute(
         select(LifePlanGoal)
@@ -361,7 +390,9 @@ def create_action(goal_id: UUID, body: ActionCreate, user: CurrentUser, db: DBSe
         .where(LifePlanGoal.id == goal_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not goal:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Objetivo não encontrado"}
+        )
 
     action = LifePlanAction(goal_id=goal_id, **body.model_dump())
     db.add(action)
@@ -371,7 +402,7 @@ def create_action(goal_id: UUID, body: ActionCreate, user: CurrentUser, db: DBSe
 
 
 @router.patch("/actions/{action_id}", response_model=ActionOut)
-def update_action(action_id: UUID, body: ActionUpdate, user: CurrentUser, db: DBSession):
+def update_action(action_id: UUID, body: ActionUpdate, user: CurrentUser, db: DBSession) -> Any:
     """Atualiza um meio concreto."""
     action = db.execute(
         select(LifePlanAction)
@@ -380,7 +411,9 @@ def update_action(action_id: UUID, body: ActionUpdate, user: CurrentUser, db: DB
         .where(LifePlanAction.id == action_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not action:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ação não encontrada"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ação não encontrada"}
+        )
 
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(action, field, value)
@@ -390,7 +423,7 @@ def update_action(action_id: UUID, body: ActionUpdate, user: CurrentUser, db: DB
 
 
 @router.delete("/actions/{action_id}", status_code=204)
-def delete_action(action_id: UUID, user: CurrentUser, db: DBSession):
+def delete_action(action_id: UUID, user: CurrentUser, db: DBSession) -> None:
     """Remove um meio concreto."""
     action = db.execute(
         select(LifePlanAction)
@@ -399,7 +432,9 @@ def delete_action(action_id: UUID, user: CurrentUser, db: DBSession):
         .where(LifePlanAction.id == action_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not action:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ação não encontrada"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ação não encontrada"}
+        )
     db.delete(action)
     db.commit()
 
@@ -408,13 +443,15 @@ def delete_action(action_id: UUID, user: CurrentUser, db: DBSession):
 
 
 @router.post("/cycles/{cycle_id}/routine", response_model=SpiritualRoutineOut)
-def upsert_routine(cycle_id: UUID, body: SpiritualRoutineUpsert, user: CurrentUser, db: DBSession):
+def upsert_routine(cycle_id: UUID, body: SpiritualRoutineUpsert, user: CurrentUser, db: DBSession) -> Any:
     """Cria ou atualiza a rotina espiritual do ciclo."""
     cycle = db.execute(
         select(LifePlanCycle).where(LifePlanCycle.id == cycle_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
 
     existing = db.execute(
         select(LifePlanSpiritualRoutine).where(LifePlanSpiritualRoutine.cycle_id == cycle_id)
@@ -438,7 +475,9 @@ def upsert_routine(cycle_id: UUID, body: SpiritualRoutineUpsert, user: CurrentUs
 
 
 @router.post("/cycles/{cycle_id}/reviews", response_model=MonthlyReviewOut, status_code=201)
-def create_monthly_review(cycle_id: UUID, body: MonthlyReviewCreate, user: CurrentUser, db: DBSession):
+def create_monthly_review(
+    cycle_id: UUID, body: MonthlyReviewCreate, user: CurrentUser, db: DBSession
+) -> Any:
     """
     Registra revisão mensal.
     Se decision = NEW_CYCLE: arquiva ciclo atual e cria novo DRAFT.
@@ -450,11 +489,16 @@ def create_monthly_review(cycle_id: UUID, body: MonthlyReviewCreate, user: Curre
         .options(selectinload(LifePlanCycle.goals))
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
     if cycle.status != "ACTIVE":
         raise HTTPException(
             status_code=400,
-            detail={"error": "invalid_state", "message": "Revisão só pode ser criada em ciclos ACTIVE"},
+            detail={
+                "error": "invalid_state",
+                "message": "Revisão só pode ser criada em ciclos ACTIVE",
+            },
         )
 
     review = LifePlanMonthlyReview(
@@ -491,13 +535,15 @@ def create_monthly_review(cycle_id: UUID, body: MonthlyReviewCreate, user: Curre
 
 
 @router.get("/cycles/{cycle_id}/reviews", response_model=list[MonthlyReviewOut])
-def get_reviews(cycle_id: UUID, user: CurrentUser, db: DBSession):
+def get_reviews(cycle_id: UUID, user: CurrentUser, db: DBSession) -> Any:
     """Lista as revisões mensais de um ciclo."""
     cycle = db.execute(
         select(LifePlanCycle).where(LifePlanCycle.id == cycle_id, LifePlanCycle.user_id == user.id)
     ).scalar_one_or_none()
     if not cycle:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"})
+        raise HTTPException(
+            status_code=404, detail={"error": "not_found", "message": "Ciclo não encontrado"}
+        )
 
     result = db.execute(
         select(LifePlanMonthlyReview)

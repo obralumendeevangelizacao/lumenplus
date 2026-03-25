@@ -11,8 +11,6 @@
  *   verify_router → /verify/*
  */
 
-import { signOut } from 'firebase/auth';
-import { auth } from '@/config/firebase';
 import api from './api';
 import {
   User,
@@ -59,10 +57,10 @@ export const authService = {
   getMe: () => api.get<User>('/auth/me'),
 
   /**
-   * Logout: encerra sessão no Firebase e limpa estado local.
+   * Logout: encerra sessão (Firebase ou dev token).
    */
   logout: async (): Promise<void> => {
-    await signOut(auth);
+    await api.clearToken();
   },
 };
 

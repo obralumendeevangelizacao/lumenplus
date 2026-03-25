@@ -96,7 +96,7 @@ def _provision_user(db: Session, payload: TokenPayload, request: Request) -> Use
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"error": "forbidden", "message": "Conta de usuário desativada"},
             )
-        return identity.user  # type: ignore[return-value]
+        return identity.user
 
     # 3. Provisionar novo usuário
     user = User(is_active=True)

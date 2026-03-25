@@ -27,6 +27,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text("DELETE FROM global_roles WHERE code = 'ANALISTA'")
-    )
+    op.execute(sa.text("DELETE FROM global_roles WHERE code = 'ANALISTA'"))

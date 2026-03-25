@@ -46,7 +46,7 @@ services:
       - ENVIRONMENT=dev
       - SECRET_KEY=dev-secret-key-change-in-production
       - ENABLE_DEV_ENDPOINTS=true
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080,http://localhost:1337
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080,http://localhost:1337,http://localhost:8081,http://localhost:19006
       - LOG_LEVEL=INFO
     ports:
       - "8000:8000"

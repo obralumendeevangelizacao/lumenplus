@@ -9,13 +9,21 @@
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
-import { auth } from '@/config/firebase';
+import { auth, IS_DEV_AUTH } from '@/config/firebase';
+import api from '@/services/api';
 
 export default function Index() {
   const [isReady, setIsReady] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    if (IS_DEV_AUTH) {
+      api.getToken().then(token => {
+        setIsLoggedIn(!!token);
+        setIsReady(true);
+      });
+      return;
+    }
     auth.authStateReady().then(() => {
       setIsLoggedIn(!!auth.currentUser);
       setIsReady(true);

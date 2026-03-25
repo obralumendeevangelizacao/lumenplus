@@ -5,7 +5,7 @@ Controle de taxa de requisições.
 """
 
 import time
-from typing import Callable
+from typing import Any, Callable, cast
 
 import structlog
 from fastapi import Request, Response, status
@@ -23,9 +23,9 @@ _rate_limit_cache: dict[str, list[float]] = {}
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Middleware de rate limiting."""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Response:
         if not settings.rate_limit_enabled:
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         # Identifica cliente
         client_id = self._get_client_id(request)
@@ -50,7 +50,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Registra requisição
         self._record_request(client_id)
 
-        return await call_next(request)
+        response: Response = await call_next(request)
+        return response
 
     def _get_client_id(self, request: Request) -> str:
         """Identifica cliente para rate limiting."""

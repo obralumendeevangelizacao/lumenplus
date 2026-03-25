@@ -9,7 +9,7 @@ Backend refatorado com:
 
 import uuid
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import sentry_sdk
 import structlog
@@ -93,7 +93,7 @@ app = FastAPI(
 )
 
 
-def custom_openapi():
+def custom_openapi() -> dict[str, Any]:
     if app.openapi_schema:
         return app.openapi_schema
     schema = get_openapi(
@@ -131,7 +131,7 @@ app.add_middleware(
 
 # Request ID middleware
 @app.middleware("http")
-async def add_request_id(request: Request, call_next):
+async def add_request_id(request: Request, call_next: Any) -> Any:
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
@@ -142,7 +142,9 @@ async def add_request_id(request: Request, call_next):
 
 # Validation error handler — 422 com formato limpo {field, message}
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     errors = []
     for error in exc.errors():
         field = ".".join(str(loc) for loc in error["loc"] if loc != "body")
@@ -176,7 +178,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 # Health check
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     from datetime import datetime, timezone
 
     return {

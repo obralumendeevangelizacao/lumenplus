@@ -230,9 +230,7 @@ def upgrade() -> None:
 
     for doc_type, content in [("TERMS", TERMS_V1), ("PRIVACY", PRIVACY_V1)]:
         existing = conn.execute(
-            sa.text(
-                "SELECT id FROM legal_documents WHERE type = :t AND version = '1.0'"
-            ),
+            sa.text("SELECT id FROM legal_documents WHERE type = :t AND version = '1.0'"),
             {"t": doc_type},
         ).fetchone()
 
@@ -261,6 +259,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Remove os documentos inseridos por esta migration
-    op.execute(
-        "DELETE FROM legal_documents WHERE version = '1.0' AND type IN ('TERMS', 'PRIVACY')"
-    )
+    op.execute("DELETE FROM legal_documents WHERE version = '1.0' AND type IN ('TERMS', 'PRIVACY')")

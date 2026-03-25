@@ -4,12 +4,14 @@ Inbox Routes
 Rotas para o sistema de avisos/inbox.
 """
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from fastapi.routing import APIRouter
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import OrgMembership, OrgUnit, MembershipStatus
@@ -36,7 +38,7 @@ router = APIRouter(prefix="/inbox", tags=["inbox"])
 # === HELPER DE PERMISSÃO ===
 
 
-def _has_full_send_access(db, user_id) -> bool:
+def _has_full_send_access(db: Session, user_id: Any) -> bool:
     """
     Retorna True se o usuário tem acesso nativo completo de envio:
     role global AVISOS, DEV, ADMIN ou SECRETARY, ou coordenador do Conselho Geral.
@@ -90,7 +92,7 @@ def get_inbox(
     include_read: bool = True,
     limit: int = 50,
     offset: int = 0,
-):
+) -> Any:
     """Lista mensagens do inbox do usuário."""
     service = InboxService(db)
     messages, total, unread_count = service.get_user_inbox(
@@ -111,7 +113,7 @@ def get_unread_messages(
     db: DBSession,
     current_user: CurrentUser,
     limit: int = 10,
-):
+) -> Any:
     """Lista apenas mensagens não lidas."""
     service = InboxService(db)
     messages = service.get_unread_messages(current_user.id, limit=limit)
@@ -122,7 +124,7 @@ def get_unread_messages(
 def mark_all_as_read(
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """Marca todas as mensagens como lidas."""
     service = InboxService(db)
     count = service.mark_all_as_read(current_user.id)
@@ -134,7 +136,7 @@ def mark_as_read(
     recipient_id: UUID,
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """
     Marca uma mensagem como lida (idempotente).
     Retorna 200 mesmo que já esteja lida; 404 apenas se o recipient não existir
@@ -159,7 +161,7 @@ def mark_as_read(
 def get_my_permissions(
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """Retorna permissões do usuário atual."""
     service = InboxService(db)
     permissions = service.get_user_permissions(current_user.id)
@@ -173,6 +175,7 @@ def get_my_permissions(
     # Verifica acesso a retiros: ADMIN/DEV, PERMISSION_MANAGE_RETREATS ou
     # membro ativo de qualquer unidade com retreat_scope=True
     from app.api.admin_retreat_routes import _is_global_retreat_manager
+
     has_retreat = _is_global_retreat_manager(db, current_user.id)
     if not has_retreat:
         retreat_membership = db.execute(
@@ -201,7 +204,7 @@ def get_my_permissions(
 def get_send_scopes(
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """
     Retorna os escopos disponíveis para envio de aviso:
     - can_send_to_all: True se tem CAN_SEND_INBOX
@@ -224,7 +227,7 @@ def get_send_scopes(
 def get_filter_options(
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """Retorna opções disponíveis para filtros de segmentação de perfil."""
     _check_send_permission(db, current_user)
     service = InboxService(db)
@@ -237,7 +240,7 @@ def preview_send(
     request: InboxPreviewRequest,
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """Preview de quantos usuários receberão o aviso."""
     _check_send_permission(db, current_user)
     # Envio global apenas para CAN_SEND_INBOX
@@ -256,7 +259,7 @@ def send_message(
     request: InboxSendRequest,
     db: DBSession,
     current_user: CurrentUser,
-):
+) -> Any:
     """Envia um aviso para os destinatários selecionados."""
     _check_send_permission(db, current_user)
 
@@ -316,7 +319,7 @@ def get_sent_messages(
     db: DBSession,
     current_user: CurrentUser,
     limit: int = 20,
-):
+) -> Any:
     """Lista mensagens enviadas pelo usuário (requer CAN_SEND_INBOX)."""
     _check_send_permission(db, current_user)
     service = InboxService(db)

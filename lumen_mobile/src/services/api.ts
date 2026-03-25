@@ -2,12 +2,29 @@
  * API Client
  * ==========
  * Cliente HTTP usando fetch nativo (sem axios).
- * Tokens são obtidos diretamente do Firebase Auth (sem SecureStore manual).
+ * Em produção, tokens vêm do Firebase Auth.
+ * Em modo DEV (sem credenciais Firebase), tokens são armazenados via AsyncStorage.
  */
 
 import { Platform } from 'react-native';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/config/firebase';
+import { auth, IS_DEV_AUTH } from '@/config/firebase';
+
+export const DEV_TOKEN_KEY = 'lumen_dev_token';
+
+// Helpers de persistência do token DEV — usam AsyncStorage para funcionar
+// em web, iOS e Android (localStorage não existe em React Native nativo).
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const AsyncStorage = () => require('@react-native-async-storage/async-storage').default;
+
+export const getDevToken = (): Promise<string | null> =>
+  AsyncStorage().getItem(DEV_TOKEN_KEY);
+
+export const setDevToken = (token: string): Promise<void> =>
+  AsyncStorage().setItem(DEV_TOKEN_KEY, token);
+
+export const removeDevToken = (): Promise<void> =>
+  AsyncStorage().removeItem(DEV_TOKEN_KEY);
 
 // URL do backend
 // Em produção: usa EXPO_PUBLIC_API_URL (injetado pelo Vercel/EAS no build)
@@ -26,13 +43,15 @@ const API_BASE_URL = getBaseUrl();
 
 class ApiClient {
   /**
-   * Obtém o ID Token do Firebase (auto-renova se expirado).
-   * Retorna null se o usuário não está autenticado.
+   * Obtém o token de autenticação.
+   * Modo DEV: lê do AsyncStorage (funciona em web, iOS e Android).
+   * Modo produção: obtém do Firebase Auth (auto-renova se expirado).
    */
   async getToken(): Promise<string | null> {
+    if (IS_DEV_AUTH) {
+      return getDevToken();
+    }
     try {
-      // Aguarda o Firebase carregar a sessão persistida antes de pegar o token.
-      // Sem isso há race condition: auth.currentUser é null na primeira renderização.
       await auth.authStateReady();
       return (await auth.currentUser?.getIdToken()) ?? null;
     } catch {
@@ -41,10 +60,14 @@ class ApiClient {
   }
 
   /**
-   * Faz logout do Firebase.
+   * Limpa o token de autenticação.
    * Chamado automaticamente em respostas 401.
    */
   async clearToken(): Promise<void> {
+    if (IS_DEV_AUTH) {
+      await removeDevToken();
+      return;
+    }
     try {
       await signOut(auth);
     } catch {

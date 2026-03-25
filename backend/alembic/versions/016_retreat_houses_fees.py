@@ -20,12 +20,20 @@ def upgrade() -> None:
     # --- retreat_houses ---
     op.create_table(
         "retreat_houses",
-        sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True,
-                  server_default=sa.text("gen_random_uuid()")),
-        sa.Column("retreat_id", sa.dialects.postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "retreat_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("retreats.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("name", sa.Text(), nullable=False),
-        sa.Column("modality", sa.Text(), nullable=False),       # PRESENCIAL | HIBRIDO
+        sa.Column("modality", sa.Text(), nullable=False),  # PRESENCIAL | HIBRIDO
         sa.Column("max_participants", sa.Integer(), nullable=True),
     )
     op.create_index("ix_retreat_house_retreat", "retreat_houses", ["retreat_id"])
@@ -33,10 +41,18 @@ def upgrade() -> None:
     # --- retreat_fee_types ---
     op.create_table(
         "retreat_fee_types",
-        sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True,
-                  server_default=sa.text("gen_random_uuid()")),
-        sa.Column("retreat_id", sa.dialects.postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("retreats.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "retreat_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("retreats.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
         sa.Column("fee_category", sa.Text(), nullable=False),
         sa.Column("amount_brl", sa.String(20), nullable=False),
         sa.UniqueConstraint("retreat_id", "fee_category", name="uq_retreat_fee_category"),
@@ -44,15 +60,23 @@ def upgrade() -> None:
     op.create_index("ix_retreat_fee_retreat", "retreat_fee_types", ["retreat_id"])
 
     # --- alter retreat_registrations ---
-    op.add_column("retreat_registrations",
-        sa.Column("modality_preference", sa.Text(), nullable=True))
-    op.add_column("retreat_registrations",
-        sa.Column("retreat_role", sa.Text(), nullable=False, server_default="PARTICIPANTE"))
-    op.add_column("retreat_registrations",
-        sa.Column("fee_category", sa.Text(), nullable=True))
-    op.add_column("retreat_registrations",
-        sa.Column("assigned_house_id", sa.dialects.postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey("retreat_houses.id", ondelete="SET NULL"), nullable=True))
+    op.add_column(
+        "retreat_registrations", sa.Column("modality_preference", sa.Text(), nullable=True)
+    )
+    op.add_column(
+        "retreat_registrations",
+        sa.Column("retreat_role", sa.Text(), nullable=False, server_default="PARTICIPANTE"),
+    )
+    op.add_column("retreat_registrations", sa.Column("fee_category", sa.Text(), nullable=True))
+    op.add_column(
+        "retreat_registrations",
+        sa.Column(
+            "assigned_house_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("retreat_houses.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+    )
 
 
 def downgrade() -> None:

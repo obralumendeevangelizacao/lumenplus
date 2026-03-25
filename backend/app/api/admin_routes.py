@@ -1,10 +1,12 @@
 """Admin endpoints for sensitive data access."""
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, DBSession
 from app.audit.service import create_audit_log
@@ -43,7 +45,7 @@ class DocumentsResponse(BaseModel):
     rg: str
 
 
-def get_user_global_roles(db, user_id: UUID) -> list[str]:
+def get_user_global_roles(db: Session, user_id: UUID) -> list[str]:
     roles = (
         db.query(GlobalRole.code)
         .join(UserGlobalRole)
@@ -53,7 +55,7 @@ def get_user_global_roles(db, user_id: UUID) -> list[str]:
     return [r[0] for r in roles]
 
 
-def require_role(db, user_id: UUID, allowed_roles: list[str]) -> None:
+def require_role(db: Session, user_id: UUID, allowed_roles: list[str]) -> None:
     user_roles = get_user_global_roles(db, user_id)
     if not any(role in allowed_roles for role in user_roles):
         raise HTTPException(

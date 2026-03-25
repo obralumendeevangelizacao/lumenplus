@@ -9,6 +9,7 @@ Schemas vivem em app.schemas.profile — este módulo apenas orquestra.
 import json
 import logging
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-def _is_profile_complete(full_name, birth_date, phone_e164, city, state) -> bool:
+def _is_profile_complete(full_name: Any, birth_date: Any, phone_e164: Any, city: Any, state: Any) -> bool:
     """Retorna True se todos os campos obrigatórios do perfil estão preenchidos."""
     return all([full_name, birth_date, phone_e164, city, state])
 
@@ -54,7 +55,8 @@ def _parse_json_list(value: str | None) -> list[str] | None:
     if not value:
         return None
     try:
-        return json.loads(value)
+        result: list[str] = json.loads(value)
+        return result
     except (json.JSONDecodeError, ValueError):
         logger.warning("Falha ao desserializar campo JSON do perfil: %.50s", value)
         return None
@@ -325,7 +327,9 @@ def _apply_profile_fields(
     # Música / Instrumentos
     profile.plays_instrument = body.plays_instrument
     if body.plays_instrument:
-        profile.instrument_names = json.dumps(body.instrument_names) if body.instrument_names else None
+        profile.instrument_names = (
+            json.dumps(body.instrument_names) if body.instrument_names else None
+        )
         profile.available_for_group = body.available_for_group
         profile.music_availability = (
             json.dumps(body.music_availability)
@@ -345,7 +349,9 @@ def _apply_profile_fields(
         profile.phone_e164 = body.phone_e164
 
     # Determina status: COMPLETE se os campos obrigatórios estão preenchidos
-    if _is_profile_complete(profile.full_name, profile.birth_date, profile.phone_e164, profile.city, profile.state):
+    if _is_profile_complete(
+        profile.full_name, profile.birth_date, profile.phone_e164, profile.city, profile.state
+    ):
         profile.status = "COMPLETE"
         if not profile.completed_at:
             profile.completed_at = datetime.now(timezone.utc)
@@ -403,15 +409,25 @@ def _create_profile(
         mission_name=body.mission_name if body.is_from_mission else None,
         despertar_encounter=body.despertar_encounter,
         plays_instrument=body.plays_instrument,
-        instrument_names=json.dumps(body.instrument_names) if body.plays_instrument and body.instrument_names else None,
+        instrument_names=json.dumps(body.instrument_names)
+        if body.plays_instrument and body.instrument_names
+        else None,
         available_for_group=body.available_for_group if body.plays_instrument else None,
         music_availability=(
             json.dumps(body.music_availability)
             if body.plays_instrument and body.available_for_group and body.music_availability
             else None
         ),
-        status="COMPLETE" if _is_profile_complete(body.full_name, body.birth_date, body.phone_e164, body.city, body.state) else "INCOMPLETE",
-        completed_at=datetime.now(timezone.utc) if _is_profile_complete(body.full_name, body.birth_date, body.phone_e164, body.city, body.state) else None,
+        status="COMPLETE"
+        if _is_profile_complete(
+            body.full_name, body.birth_date, body.phone_e164, body.city, body.state
+        )
+        else "INCOMPLETE",
+        completed_at=datetime.now(timezone.utc)
+        if _is_profile_complete(
+            body.full_name, body.birth_date, body.phone_e164, body.city, body.state
+        )
+        else None,
     )
 
 

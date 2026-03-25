@@ -7,18 +7,29 @@ SEGURANÇA: Toda visualização de CPF/RG é auditada obrigatoriamente.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, or_, func, exists, nullslast, delete, desc
+from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import (
-    UserProfile, User, UserIdentity, UserGlobalRole, GlobalRole,
-    ProfileCatalogItem, ProfileCatalog,
-    OrgMembership, MembershipStatus, OrgUnit, OrgUnitType,
-    OrgInvite, InviteStatus,
+    UserProfile,
+    User,
+    UserIdentity,
+    UserGlobalRole,
+    GlobalRole,
+    ProfileCatalogItem,
+    ProfileCatalog,
+    OrgMembership,
+    MembershipStatus,
+    OrgUnit,
+    OrgUnitType,
+    OrgInvite,
+    InviteStatus,
     AuditLog,
 )
 from app.services.organization import get_user_global_roles, is_conselho_geral_coordinator  # noqa: F401
@@ -30,7 +41,8 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 # HELPER — verifica acesso ao dashboard/analytics
 # =============================================================================
 
-def require_admin_or_analista(db, user_id):
+
+def require_admin_or_analista(db: Session, user_id: UUID) -> None:
     roles = get_user_global_roles(db, user_id)
     if not any(r in roles for r in ["ADMIN", "DEV", "ANALISTA"]):
         raise HTTPException(
@@ -54,7 +66,7 @@ async def list_users(
     search: str = Query(default="", description="Busca por nome ou e-mail"),
     limit: int = Query(default=50, le=200),
     offset: int = Query(default=0, ge=0),
-):
+) -> Any:
     """
     Lista usuários com perfil, e-mail e papéis globais.
     Requer DEV, ADMIN ou SECRETARY.
@@ -69,7 +81,7 @@ async def list_users(
 
     # Join apenas com UserProfile (1-para-1) para evitar duplicatas.
     # Busca por email usa EXISTS → sem JOIN com UserIdentity na query principal.
-    def _apply_search(stmt, term: str):
+    def _apply_search(stmt: Any, term: str) -> Any:
         email_match = exists().where(
             UserIdentity.user_id == User.id,
             UserIdentity.email.ilike(term),
@@ -136,7 +148,7 @@ async def update_user(
     data: UpdateUserRequest,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """
     Edita nome e/ou roles globais de um usuário.
     Requer DEV ou ADMIN.
@@ -212,7 +224,7 @@ async def toggle_avisos_role(
     data: ToggleAvisosRequest,
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """
     Concede ou revoga o cargo AVISOS de um usuário.
     Requer DEV, ADMIN ou ser coordenador do Conselho Geral.
@@ -281,7 +293,8 @@ async def toggle_avisos_role(
 # DASHBOARD — métricas de governança
 # =============================================================================
 
-def _calc_age_ranges(birth_dates: list) -> list[dict]:
+
+def _calc_age_ranges(birth_dates: list[Any]) -> list[dict[str, Any]]:
     """Agrupa datas de nascimento em faixas etárias."""
     today = datetime.now(timezone.utc).date()
     buckets: dict[str, int] = {
@@ -326,7 +339,7 @@ _UNIT_TYPE_LABELS = {
 async def get_dashboard(
     current_user: CurrentUser,
     db: DBSession,
-):
+) -> Any:
     """
     Retorna métricas consolidadas do aplicativo.
     Requer ADMIN, DEV ou ANALISTA.
@@ -338,36 +351,49 @@ async def get_dashboard(
     cutoff_30d = now - timedelta(days=30)
 
     # --- Usuários ---
-    total_users = db.execute(
-        select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
-    ).scalar() or 0
+    total_users = (
+        db.execute(
+            select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
+        ).scalar()
+        or 0
+    )
 
-    complete_profiles = db.execute(
-        select(func.count(UserProfile.user_id)).where(UserProfile.status == "COMPLETE")
-    ).scalar() or 0
+    complete_profiles = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(UserProfile.status == "COMPLETE")
+        ).scalar()
+        or 0
+    )
 
-    incomplete_profiles = db.execute(
-        select(func.count(UserProfile.user_id)).where(UserProfile.status != "COMPLETE")
-    ).scalar() or 0
+    incomplete_profiles = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(UserProfile.status != "COMPLETE")
+        ).scalar()
+        or 0
+    )
 
-    new_7d = db.execute(
-        select(func.count(User.id)).where(
-            User.is_active == True,  # noqa: E712
-            User.created_at >= cutoff_7d,
-        )
-    ).scalar() or 0
+    new_7d = (
+        db.execute(
+            select(func.count(User.id)).where(
+                User.is_active == True,  # noqa: E712
+                User.created_at >= cutoff_7d,
+            )
+        ).scalar()
+        or 0
+    )
 
-    new_30d = db.execute(
-        select(func.count(User.id)).where(
-            User.is_active == True,  # noqa: E712
-            User.created_at >= cutoff_30d,
-        )
-    ).scalar() or 0
+    new_30d = (
+        db.execute(
+            select(func.count(User.id)).where(
+                User.is_active == True,  # noqa: E712
+                User.created_at >= cutoff_30d,
+            )
+        ).scalar()
+        or 0
+    )
 
     # --- Faixas etárias ---
-    birth_dates = db.execute(
-        select(UserProfile.birth_date)
-    ).scalars().all()
+    birth_dates = db.execute(select(UserProfile.birth_date)).scalars().all()
     age_ranges = _calc_age_ranges(list(birth_dates))
 
     # --- Geografia ---
@@ -390,7 +416,7 @@ async def get_dashboard(
     by_state = [{"state": r[0], "count": r[1]} for r in state_rows]
 
     # --- Catálogos ---
-    def _catalog_breakdown(catalog_code: str, fk_col):
+    def _catalog_breakdown(catalog_code: str, fk_col: Any) -> list[dict[str, Any]]:
         rows = db.execute(
             select(ProfileCatalogItem.label, func.count(fk_col).label("cnt"))
             .join(
@@ -409,38 +435,55 @@ async def get_dashboard(
 
     by_life_state = _catalog_breakdown("LIFE_STATE", UserProfile.life_state_item_id)
     by_marital_status = _catalog_breakdown("MARITAL_STATUS", UserProfile.marital_status_item_id)
-    by_vocational_reality = _catalog_breakdown("VOCATIONAL_REALITY", UserProfile.vocational_reality_item_id)
+    by_vocational_reality = _catalog_breakdown(
+        "VOCATIONAL_REALITY", UserProfile.vocational_reality_item_id
+    )
 
-    with_voc = db.execute(
-        select(func.count(UserProfile.user_id)).where(
-            UserProfile.has_vocational_accompaniment == True  # noqa: E712
-        )
-    ).scalar() or 0
+    with_voc = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(
+                UserProfile.has_vocational_accompaniment == True  # noqa: E712
+            )
+        ).scalar()
+        or 0
+    )
 
-    without_voc = db.execute(
-        select(func.count(UserProfile.user_id)).where(
-            UserProfile.has_vocational_accompaniment == False  # noqa: E712
-        )
-    ).scalar() or 0
+    without_voc = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(
+                UserProfile.has_vocational_accompaniment == False  # noqa: E712
+            )
+        ).scalar()
+        or 0
+    )
 
-    interested_ministry_count = db.execute(
-        select(func.count(UserProfile.user_id)).where(
-            UserProfile.interested_in_ministry == True  # noqa: E712
-        )
-    ).scalar() or 0
+    interested_ministry_count = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(
+                UserProfile.interested_in_ministry == True  # noqa: E712
+            )
+        ).scalar()
+        or 0
+    )
 
-    from_mission_count = db.execute(
-        select(func.count(UserProfile.user_id)).where(
-            UserProfile.is_from_mission == True  # noqa: E712
-        )
-    ).scalar() or 0
+    from_mission_count = (
+        db.execute(
+            select(func.count(UserProfile.user_id)).where(
+                UserProfile.is_from_mission == True  # noqa: E712
+            )
+        ).scalar()
+        or 0
+    )
 
     # --- Memberships ---
-    total_active_memberships = db.execute(
-        select(func.count(OrgMembership.id)).where(
-            OrgMembership.status == MembershipStatus.ACTIVE
-        )
-    ).scalar() or 0
+    total_active_memberships = (
+        db.execute(
+            select(func.count(OrgMembership.id)).where(
+                OrgMembership.status == MembershipStatus.ACTIVE
+            )
+        ).scalar()
+        or 0
+    )
 
     unit_type_rows = db.execute(
         select(OrgUnit.type, func.count(OrgMembership.id).label("cnt"))
@@ -460,15 +503,24 @@ async def get_dashboard(
 
     # --- Convites ---
     total_invites = db.execute(select(func.count(OrgInvite.id))).scalar() or 0
-    accepted_invites = db.execute(
-        select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.ACCEPTED)
-    ).scalar() or 0
-    pending_invites = db.execute(
-        select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.PENDING)
-    ).scalar() or 0
-    declined_invites = db.execute(
-        select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.REJECTED)
-    ).scalar() or 0
+    accepted_invites = (
+        db.execute(
+            select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.ACCEPTED)
+        ).scalar()
+        or 0
+    )
+    pending_invites = (
+        db.execute(
+            select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.PENDING)
+        ).scalar()
+        or 0
+    )
+    declined_invites = (
+        db.execute(
+            select(func.count(OrgInvite.id)).where(OrgInvite.status == InviteStatus.REJECTED)
+        ).scalar()
+        or 0
+    )
     acceptance_rate = round(accepted_invites / total_invites * 100, 1) if total_invites > 0 else 0.0
 
     # --- Top ministérios ---
@@ -526,6 +578,7 @@ async def get_dashboard(
 # AUDIT LOGS
 # =============================================================================
 
+
 @router.get("/audit-logs")
 async def get_audit_logs(
     current_user: CurrentUser,
@@ -534,7 +587,7 @@ async def get_audit_logs(
     page_size: int = Query(default=20, ge=1, le=100),
     action: str = Query(default=None),
     actor_user_id: str = Query(default=None),
-):
+) -> Any:
     """
     Lista logs de auditoria com paginação.
     Requer ADMIN, DEV ou ANALISTA.
@@ -555,14 +608,14 @@ async def get_audit_logs(
             )
         base = base.where(AuditLog.actor_user_id == parsed_id)
 
-    total = db.execute(
-        select(func.count()).select_from(base.subquery())
-    ).scalar() or 0
+    total = db.execute(select(func.count()).select_from(base.subquery())).scalar() or 0
 
     offset_val = (page - 1) * page_size
-    rows = db.execute(
-        base.order_by(desc(AuditLog.created_at)).offset(offset_val).limit(page_size)
-    ).scalars().all()
+    rows = (
+        db.execute(base.order_by(desc(AuditLog.created_at)).offset(offset_val).limit(page_size))
+        .scalars()
+        .all()
+    )
 
     items = []
     for log in rows:
@@ -573,15 +626,17 @@ async def get_audit_logs(
             ).scalar_one_or_none()
             actor_name = actor_profile.full_name if actor_profile else None
 
-        items.append({
-            "id": str(log.id),
-            "action": log.action,
-            "actor_name": actor_name,
-            "entity_type": log.entity_type,
-            "entity_id": log.entity_id,
-            "extra_data": log.extra_data,
-            "created_at": log.created_at.isoformat(),
-        })
+        items.append(
+            {
+                "id": str(log.id),
+                "action": log.action,
+                "actor_name": actor_name,
+                "entity_type": log.entity_type,
+                "entity_id": log.entity_id,
+                "extra_data": log.extra_data,
+                "created_at": log.created_at.isoformat(),
+            }
+        )
 
     return {
         "total": total,

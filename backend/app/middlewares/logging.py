@@ -11,7 +11,7 @@ IMPORTANTE: Este middleware NUNCA loga:
 """
 
 import time
-from typing import Callable
+from typing import Any, Callable
 
 import structlog
 from fastapi import Request, Response
@@ -35,7 +35,7 @@ SENSITIVE_HEADERS = ["authorization", "cookie", "x-api-key"]
 class LoggingMiddleware(BaseHTTPMiddleware):
     """Middleware de logging com proteção de dados sensíveis."""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Response:
         start_time = time.perf_counter()
 
         # Log de entrada (sem dados sensíveis)
@@ -50,7 +50,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         )
 
         # Processa requisição
-        response = await call_next(request)
+        response: Response = await call_next(request)
 
         # Calcula duração
         duration_ms = (time.perf_counter() - start_time) * 1000
@@ -66,7 +66,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _get_safe_headers(self, request: Request) -> dict:
+    def _get_safe_headers(self, request: Request) -> dict[str, str]:
         """Retorna headers seguros para logging (sem dados sensíveis)."""
         safe = {}
         for key, value in request.headers.items():

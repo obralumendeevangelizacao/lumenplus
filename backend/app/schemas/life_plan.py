@@ -7,7 +7,7 @@ Dados sensíveis. Não expor em logs ou relatórios de admin.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -166,14 +166,14 @@ class CycleCreate(BaseModel):
 
 
 class WizardProgressUpdate(BaseModel):
-    wizard_progress: dict
+    wizard_progress: dict[str, Any]
 
 
 class CycleOut(BaseModel):
     id: UUID
     status: str
     realidade_vocacional: Optional[str]
-    wizard_progress: Optional[dict]
+    wizard_progress: Optional[dict[str, Any]]
     started_at: Optional[date]
     ended_at: Optional[date]
     created_at: datetime

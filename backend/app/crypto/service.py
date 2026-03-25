@@ -116,7 +116,8 @@ class CryptoService:
             raise ValueError(
                 f"CPF deve ter 11 dígitos após normalização, recebeu {len(normalized)}"
             )
-        return hmac.new(  # type: ignore[arg-type]
+        assert self._hmac_pepper is not None
+        return hmac.new(
             self._hmac_pepper, normalized.encode(), hashlib.sha256
         ).hexdigest()
 
