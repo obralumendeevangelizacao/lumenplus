@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 from typing import Optional
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 import re
 
 from app.schemas.base import BaseSchema

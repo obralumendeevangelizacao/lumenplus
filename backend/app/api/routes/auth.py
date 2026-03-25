@@ -9,7 +9,6 @@ mantendo compatibilidade com todos os módulos que fazem:
 """
 
 from datetime import datetime, timezone
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -18,8 +17,8 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.db.models import (
     User, UserIdentity, UserProfile, UserConsent,
-    OrgMembership, MembershipStatus, OrgInvite, InviteStatus,
-    UserGlobalRole, GlobalRole, LegalDocument, UserPreferences,
+    MembershipStatus, OrgInvite, InviteStatus,
+    LegalDocument, UserPreferences,
 )
 from app.schemas.auth import (
     RegisterRequest,

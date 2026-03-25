@@ -10,7 +10,7 @@ Dados extremamente sensíveis.
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 

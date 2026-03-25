@@ -48,7 +48,6 @@ from app.db.models import (
     RetreatRegistration,
     RetreatServiceTeam,
     RetreatServiceTeamMember,
-    RetreatTeamPreference,
     RetreatStatus,
     RetreatType,
     RetreatVisibilityType,
@@ -58,7 +57,6 @@ from app.db.models import (
     UserGlobalRole,
     UserPermission,
     UserProfile,
-    MembershipStatus,
 )
 
 router = APIRouter(prefix="/admin/retreats", tags=["Admin — Retreats"])
@@ -246,7 +244,7 @@ def _retreat_to_dict(retreat: Retreat, include_registrations: bool = False) -> d
 def _notify_eligible_users(db, retreat: Retreat) -> None:
     """Envia aviso no inbox para todos os usuários elegíveis ao publicar um retiro."""
     if retreat.visibility_type == RetreatVisibilityType.ALL:
-        users = db.execute(select(User).where(User.is_active == True)).scalars().all()
+        users = db.execute(select(User).where(User.is_active)).scalars().all()
     else:
         rules = db.execute(
             select(RetreatEligibilityRule).where(RetreatEligibilityRule.retreat_id == retreat.id)
@@ -278,7 +276,7 @@ def _notify_eligible_users(db, retreat: Retreat) -> None:
                     user_ids.update(p.user_id for p in profiles)
 
         users = db.execute(
-            select(User).where(User.id.in_(user_ids), User.is_active == True)
+            select(User).where(User.id.in_(user_ids), User.is_active)
         ).scalars().all()
 
     if not users:

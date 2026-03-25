@@ -29,7 +29,6 @@ from app.schemas.organization import (
 from app.services.organization import (
     OrgServiceError,
     create_org_unit,
-    get_org_tree,
     get_org_unit_members,
     get_org_unit_pending_invites,
     get_user_global_roles,
@@ -182,8 +181,7 @@ async def get_organization_tree(
     if not all_units:
         return OrgTreeResponse(root=None)
 
-    # Monta lookup e encontra raiz em Python (sem novas queries)
-    units_by_id: dict = {u.id: u for u in all_units}
+    # Encontra raiz em Python (sem novas queries)
     root = next(
         (u for u in all_units if u.type == OrgUnitType.CONSELHO_GERAL and u.parent_id is None),
         None,

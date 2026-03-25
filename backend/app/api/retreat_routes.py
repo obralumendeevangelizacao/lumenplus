@@ -18,18 +18,14 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 
-logger = logging.getLogger(__name__)
-
 from app.api.deps import CurrentUser, DBSession
 from app.db.models import (
     OrgMembership,
-    OrgUnit,
     ProfileCatalogItem,
     Retreat,
     RetreatEligibilityRule,
     RetreatEligibilityRuleType,
     RetreatFeeType,
-    RetreatHouse,
     RetreatRegistration,
     RetreatServiceTeam,
     RetreatTeamPreference,
@@ -41,6 +37,8 @@ from app.db.models import (
     MembershipStatus,
 )
 from app.settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/retreats", tags=["Retreats"])
 

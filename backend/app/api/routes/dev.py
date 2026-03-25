@@ -6,7 +6,6 @@ DESABILITAR EM PRODUÇÃO!
 """
 
 from uuid import UUID
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -14,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.db.models import (
-    User, UserProfile, UserIdentity, GlobalRole, UserGlobalRole,
+    User, GlobalRole, UserGlobalRole,
     OrgUnit, OrgUnitType, Visibility, OrgMembership, OrgRoleCode, MembershipStatus,
     LegalDocument, ProfileCatalog, ProfileCatalogItem,
 )
